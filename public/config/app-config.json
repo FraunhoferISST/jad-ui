@@ -43,7 +43,14 @@
       "text": "Transfer History",
       "materialSymbol": "schedule_send",
       "routerPath": "transfer-history",
-      "viewDescription": "The transfer history view lets you browse and deprovision finished and ongoing transfer processes. You can switch between providing and consuming transfer processes of the selected connector."
+      "viewDescription": "The transfer history view lets you browse and deprovision finished and ongoing transfer processes. You can switch between providing and consuming transfer processes of the selected connector.",
+      "divider": true
+    },
+    {
+      "text": "Tenants",
+      "materialSymbol": "groups",
+      "routerPath": "tenants",
+      "viewDescription": "The tenants view lets operators manage the Redline backend hierarchy: service providers, dataspaces, tenants and their participants. You can create service providers and dataspaces, register new tenants (which automatically creates a participant profile), and deploy participants or register data planes for them."
     }
   ]
 }

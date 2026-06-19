@@ -1,0 +1,21 @@
+<form (ngSubmit)="submit()" class="flex flex-col gap-4">
+  <h3 class="text-lg font-bold">New service provider</h3>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Name</legend>
+    <input
+      type="text"
+      name="name"
+      class="input w-full"
+      placeholder="e.g. Acme Operator"
+      [(ngModel)]="name"
+      required
+      autofocus />
+    <p class="label">A human-readable name for the service provider.</p>
+  </fieldset>
+
+  <div class="modal-action">
+    <button type="button" class="btn btn-ghost" (click)="cancel.emit()">Cancel</button>
+    <button type="submit" class="btn btn-primary" [disabled]="!name.trim()">Create</button>
+  </div>
+</form>

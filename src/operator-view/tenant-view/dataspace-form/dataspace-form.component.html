@@ -1,0 +1,50 @@
+<form (ngSubmit)="submit()" class="flex flex-col gap-4">
+  <h3 class="text-lg font-bold">New dataspace</h3>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Name</legend>
+    <input
+      type="text"
+      name="name"
+      class="input w-full"
+      placeholder="e.g. Mobility Dataspace"
+      [(ngModel)]="name"
+      required
+      autofocus />
+    <p class="label">A human-readable name for the dataspace.</p>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Properties</legend>
+    <div class="flex flex-col gap-2">
+      @for (row of properties; track $index) {
+        <div class="join w-full">
+          <input
+            type="text"
+            class="input join-item w-1/2"
+            placeholder="Key"
+            [name]="'prop-key-' + $index"
+            [(ngModel)]="row.key" />
+          <input
+            type="text"
+            class="input join-item w-1/2"
+            placeholder="Value"
+            [name]="'prop-value-' + $index"
+            [(ngModel)]="row.value" />
+          <button type="button" class="btn join-item btn-square btn-error btn-outline" (click)="removeProperty($index)">
+            <span class="material-symbols-rounded text-base">delete</span>
+          </button>
+        </div>
+      }
+      <button type="button" class="btn btn-sm btn-outline self-start" (click)="addProperty()">
+        <span class="material-symbols-rounded text-base">add</span>
+        Add property
+      </button>
+    </div>
+  </fieldset>
+
+  <div class="modal-action">
+    <button type="button" class="btn btn-ghost" (click)="cancel.emit()">Cancel</button>
+    <button type="submit" class="btn btn-primary" [disabled]="!name.trim()">Create</button>
+  </div>
+</form>

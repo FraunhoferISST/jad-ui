@@ -1,0 +1,92 @@
+<form (ngSubmit)="submit()" class="flex flex-col gap-4">
+  <h3 class="text-lg font-bold">Register tenant</h3>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Tenant name</legend>
+    <input
+      type="text"
+      name="tenantName"
+      class="input w-full"
+      placeholder="e.g. Acme Logistics"
+      [(ngModel)]="tenantName"
+      required
+      autofocus />
+    <p class="label">A participant profile is created automatically for the tenant.</p>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Dataspaces</legend>
+    @if (selections.length === 0) {
+      <div role="alert" class="alert alert-warning alert-soft">
+        <span class="material-symbols-rounded text-base">info</span>
+        <span>No dataspaces available. Create a dataspace first to join one.</span>
+      </div>
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (selection of selections; track selection.dataspace.id) {
+          <div class="rounded-box border border-base-300 p-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [name]="'ds-' + selection.dataspace.id"
+                [(ngModel)]="selection.selected" />
+              <span class="font-medium">{{ selection.dataspace.name }}</span>
+              <span class="text-xs opacity-60">#{{ selection.dataspace.id }}</span>
+            </label>
+            @if (selection.selected) {
+              <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                <input
+                  type="text"
+                  class="input input-sm w-full"
+                  placeholder="Roles (comma separated)"
+                  [name]="'roles-' + selection.dataspace.id"
+                  [(ngModel)]="selection.roles" />
+                <input
+                  type="text"
+                  class="input input-sm w-full"
+                  placeholder="Agreement types (comma separated)"
+                  [name]="'agreements-' + selection.dataspace.id"
+                  [(ngModel)]="selection.agreementTypes" />
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Properties</legend>
+    <div class="flex flex-col gap-2">
+      @for (row of properties; track $index) {
+        <div class="join w-full">
+          <input
+            type="text"
+            class="input join-item w-1/2"
+            placeholder="Key"
+            [name]="'prop-key-' + $index"
+            [(ngModel)]="row.key" />
+          <input
+            type="text"
+            class="input join-item w-1/2"
+            placeholder="Value"
+            [name]="'prop-value-' + $index"
+            [(ngModel)]="row.value" />
+          <button type="button" class="btn join-item btn-square btn-error btn-outline" (click)="removeProperty($index)">
+            <span class="material-symbols-rounded text-base">delete</span>
+          </button>
+        </div>
+      }
+      <button type="button" class="btn btn-sm btn-outline self-start" (click)="addProperty()">
+        <span class="material-symbols-rounded text-base">add</span>
+        Add property
+      </button>
+    </div>
+  </fieldset>
+
+  <div class="modal-action">
+    <button type="button" class="btn btn-ghost" (click)="cancel.emit()">Cancel</button>
+    <button type="submit" class="btn btn-primary" [disabled]="!tenantName.trim()">Register</button>
+  </div>
+</form>
