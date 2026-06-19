@@ -1,50 +1,31 @@
-<form (ngSubmit)="submit()" class="flex flex-col gap-4">
-  <h3 class="text-lg font-bold">New dataspace</h3>
+<form
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  class="grid grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0">
+  <h1 class="text-xl text-center divider m-0">Dataspace</h1>
 
-  <fieldset class="fieldset">
-    <legend class="fieldset-legend">Name</legend>
-    <input
-      type="text"
-      name="name"
-      class="input w-full"
-      placeholder="e.g. Mobility Dataspace"
-      [(ngModel)]="name"
-      required
-      autofocus />
-    <p class="label">A human-readable name for the dataspace.</p>
+  <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">
+    <legend class="fieldset-legend text-sm">Common Fields</legend>
+    <legend class="fieldset-label">Name</legend>
+    <label
+      class="input flex items-center tooltip tooltip-info tooltip-top w-full"
+      data-tip="A human-readable name for the dataspace">
+      <span class="material-symbols-rounded opacity-50">hub</span>
+      <input type="text" class="grow" placeholder="Name" formControlName="name" />
+      <span class="badge badge-error">Required</span>
+    </label>
   </fieldset>
 
-  <fieldset class="fieldset">
-    <legend class="fieldset-legend">Properties</legend>
-    <div class="flex flex-col gap-2">
-      @for (row of properties; track $index) {
-        <div class="join w-full">
-          <input
-            type="text"
-            class="input join-item w-1/2"
-            placeholder="Key"
-            [name]="'prop-key-' + $index"
-            [(ngModel)]="row.key" />
-          <input
-            type="text"
-            class="input join-item w-1/2"
-            placeholder="Value"
-            [name]="'prop-value-' + $index"
-            [(ngModel)]="row.value" />
-          <button type="button" class="btn join-item btn-square btn-error btn-outline" (click)="removeProperty($index)">
-            <span class="material-symbols-rounded text-base">delete</span>
-          </button>
-        </div>
-      }
-      <button type="button" class="btn btn-sm btn-outline self-start" (click)="addProperty()">
-        <span class="material-symbols-rounded text-base">add</span>
-        Add property
-      </button>
-    </div>
+  <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">
+    <legend class="fieldset-legend text-sm">Properties</legend>
+    <lib-json-object-input [object]="properties" (objectChange)="properties = $event"></lib-json-object-input>
   </fieldset>
 
-  <div class="modal-action">
-    <button type="button" class="btn btn-ghost" (click)="cancel.emit()">Cancel</button>
-    <button type="submit" class="btn btn-primary" [disabled]="!name.trim()">Create</button>
+  <div class="flex flex-col items-center">
+    <div class="divider mt-0"></div>
+    <button type="submit" [disabled]="form.invalid" class="btn btn-lg w-full btn-primary">
+      <i class="material-symbols-rounded">add</i>
+      Create Dataspace
+    </button>
   </div>
 </form>

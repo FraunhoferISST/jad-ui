@@ -1,55 +1,43 @@
-import { Component, EventEmitter, Output } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, EventEmitter, inject, Output } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { JsonObjectInputComponent } from '@eclipse-edc/dashboard-core';
 
 import { DataspaceRequest } from '../../models/redline.models';
-
-interface PropertyRow {
-  key: string;
-  value: string;
-}
 
 /** Form for creating a new dataspace. Rendered inside a modal. */
 @Component({
   selector: 'dataspace-form',
   standalone: true,
-  imports: [FormsModule],
+  imports: [ReactiveFormsModule, JsonObjectInputComponent],
   templateUrl: './dataspace-form.component.html',
 })
 export class DataspaceFormComponent {
+  private readonly fb = inject(FormBuilder);
+
   /** Emitted with the new dataspace when the form is submitted. */
   @Output() save = new EventEmitter<DataspaceRequest>();
 
   /** Emitted when the user cancels the form. */
   @Output() cancel = new EventEmitter<void>();
 
-  name = '';
-  properties: PropertyRow[] = [];
+  readonly form = this.fb.nonNullable.group({
+    name: ['', [Validators.required]],
+  });
 
-  addProperty(): void {
-    this.properties.push({ key: '', value: '' });
-  }
-
-  removeProperty(index: number): void {
-    this.properties.splice(index, 1);
-  }
+  properties: Record<string, any> = {};
 
   submit(): void {
-    const name = this.name.trim();
+    if (this.form.invalid) {
+      return;
+    }
+    const name = this.form.controls.name.value.trim();
     if (!name) {
       return;
     }
 
-    const properties = this.properties.reduce<Record<string, unknown>>((acc, row) => {
-      const key = row.key.trim();
-      if (key) {
-        acc[key] = row.value;
-      }
-      return acc;
-    }, {});
-
     const request: DataspaceRequest = { name };
-    if (Object.keys(properties).length > 0) {
-      request.properties = properties;
+    if (Object.keys(this.properties).length > 0) {
+      request.properties = this.properties;
     }
     this.save.emit(request);
   }

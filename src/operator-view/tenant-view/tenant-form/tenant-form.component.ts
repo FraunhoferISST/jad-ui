@@ -1,23 +1,12 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { JsonObjectInputComponent } from '@eclipse-edc/dashboard-core';
 
 import {
   DataspaceInfo,
   DataspaceResponse,
   TenantRegistration,
 } from '../../models/redline.models';
-
-interface PropertyRow {
-  key: string;
-  value: string;
-}
-
-interface DataspaceSelection {
-  dataspace: DataspaceResponse;
-  selected: boolean;
-  roles: string;
-  agreementTypes: string;
-}
 
 /**
  * Form for registering a new tenant under a service provider. Allows selecting
@@ -27,10 +16,12 @@ interface DataspaceSelection {
 @Component({
   selector: 'tenant-form',
   standalone: true,
-  imports: [FormsModule],
+  imports: [ReactiveFormsModule, JsonObjectInputComponent],
   templateUrl: './tenant-form.component.html',
 })
 export class TenantFormComponent implements OnInit {
+  private readonly fb = inject(FormBuilder);
+
   /** Dataspaces available for the tenant to join. */
   @Input() dataspaces: DataspaceResponse[] = [];
 
@@ -40,25 +31,29 @@ export class TenantFormComponent implements OnInit {
   /** Emitted when the user cancels the form. */
   @Output() cancel = new EventEmitter<void>();
 
-  tenantName = '';
-  properties: PropertyRow[] = [];
-  selections: DataspaceSelection[] = [];
+  readonly form = this.fb.nonNullable.group({
+    tenantName: ['', [Validators.required]],
+    dataspaces: this.fb.array<FormGroup>([]),
+  });
+
+  properties: Record<string, any> = {};
+
+  get dataspacesArray(): FormArray<FormGroup> {
+    return this.form.controls.dataspaces;
+  }
 
   ngOnInit(): void {
-    this.selections = this.dataspaces.map(dataspace => ({
-      dataspace,
-      selected: false,
-      roles: '',
-      agreementTypes: '',
-    }));
-  }
-
-  addProperty(): void {
-    this.properties.push({ key: '', value: '' });
-  }
-
-  removeProperty(index: number): void {
-    this.properties.splice(index, 1);
+    this.dataspaces.forEach(dataspace => {
+      this.dataspacesArray.push(
+        this.fb.nonNullable.group({
+          dataspaceId: [dataspace.id],
+          name: [dataspace.name],
+          selected: [false],
+          roles: [''],
+          agreementTypes: [''],
+        }),
+      );
+    });
   }
 
   private splitList(value: string): string[] {
@@ -69,15 +64,19 @@ export class TenantFormComponent implements OnInit {
   }
 
   submit(): void {
-    const tenantName = this.tenantName.trim();
+    if (this.form.invalid) {
+      return;
+    }
+    const tenantName = this.form.controls.tenantName.value.trim();
     if (!tenantName) {
       return;
     }
 
-    const dataspaceInfos: DataspaceInfo[] = this.selections
+    const dataspaceInfos: DataspaceInfo[] = this.dataspacesArray.controls
+      .map(group => group.value)
       .filter(selection => selection.selected)
       .map(selection => {
-        const info: DataspaceInfo = { dataspaceId: selection.dataspace.id };
+        const info: DataspaceInfo = { dataspaceId: selection.dataspaceId };
         const roles = this.splitList(selection.roles);
         const agreementTypes = this.splitList(selection.agreementTypes);
         if (roles.length > 0) {
@@ -89,20 +88,12 @@ export class TenantFormComponent implements OnInit {
         return info;
       });
 
-    const properties = this.properties.reduce<Record<string, unknown>>((acc, row) => {
-      const key = row.key.trim();
-      if (key) {
-        acc[key] = row.value;
-      }
-      return acc;
-    }, {});
-
     const registration: TenantRegistration = { tenantName };
     if (dataspaceInfos.length > 0) {
       registration.dataspaceInfos = dataspaceInfos;
     }
-    if (Object.keys(properties).length > 0) {
-      registration.properties = properties;
+    if (Object.keys(this.properties).length > 0) {
+      registration.properties = this.properties;
     }
     this.save.emit(registration);
   }
