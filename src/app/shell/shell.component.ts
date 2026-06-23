@@ -1,10 +1,15 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { AppConfig, DashboardAppComponent, EdcConfig, MenuItem } from '@eclipse-edc/dashboard-core';
+import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig, MenuItem } from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
 import { canAccess } from '../auth/access-rules';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
+
+/** Local-storage key the library's DashboardStateService uses to persist the
+ * currently selected connector. We clear it on load so the connector is chosen
+ * deterministically by role instead of being restored from a previous session. */
+const CURRENT_CONNECTOR_KEY = 'currentConnector';
 
 /**
  * Authenticated layout that hosts the dashboard shell (`lib-dashboard-app`).
@@ -27,6 +32,17 @@ export class ShellComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly redlineConfig = inject(REDLINE_CONFIG);
+  private readonly stateService: DashboardStateService;
+
+  constructor() {
+    // The library's DashboardStateService restores the previously selected
+    // connector from local storage in its constructor. Clear that key *before*
+    // the service is first injected (and therefore constructed) so it cannot
+    // restore a stale or wrong-role connector. The active connector is then set
+    // deterministically by role in `ngOnInit`.
+    localStorage.removeItem(CURRENT_CONNECTOR_KEY);
+    this.stateService = inject(DashboardStateService);
+  }
 
   protected readonly themes = [
     'light',
@@ -51,10 +67,22 @@ export class ShellComponent implements OnInit {
     // navbar's health indicator reflects the Redline backend's health. The
     // library calls `${defaultUrl}/check/health`, which the gateway in front of
     // Redline is expected to route to the Redline health endpoint.
-    this.edcConfigs =
+    const configs$: Promise<EdcConfig[]> =
       this.auth.role() === 'operator'
         ? Promise.resolve([this.toEdcConfig(this.redlineConfig.baseUrl)])
         : firstValueFrom(this.http.get<EdcConfig[]>('config/edc-connector-config.json'));
+
+    // Assigned synchronously so the library's `ngAfterViewInit` can await it.
+    this.edcConfigs = configs$.then(configs => {
+      // Make the first connector of the active role the current one. With the
+      // persisted connector already cleared in the constructor, this is the
+      // single source of truth for the initial selection.
+      if (configs.length > 0) {
+        this.stateService.setCurrentEdcConfig(configs[0]);
+      }
+      return configs;
+    });
+
     this.appConfig = firstValueFrom(this.http.get<AppConfig>('config/app-config.json')).then(
       config => this.applyRoleMenu(config),
     );
