@@ -1,0 +1,65 @@
+<div class="flex min-h-screen items-center justify-center bg-base-200 p-4">
+  <div class="card w-full max-w-sm bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h1 class="card-title justify-center text-2xl">Sign in</h1>
+      <p class="text-center text-sm text-base-content/60">
+        Access the JAD UI
+      </p>
+
+      @if (error()) {
+        <div role="alert" class="alert alert-error alert-soft mt-2">
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      <form class="mt-2 flex flex-col gap-4" (ngSubmit)="submit()">
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium">Username</span>
+          <input
+            type="text"
+            name="username"
+            class="input w-full"
+            placeholder="Username"
+            autocomplete="username"
+            required
+            [ngModel]="username()"
+            (ngModelChange)="username.set($event)"
+            [disabled]="loading()"
+          />
+        </label>
+
+        <label class="flex flex-col gap-1">
+          <span class="text-sm font-medium">Password</span>
+          <input
+            type="password"
+            name="password"
+            class="input w-full"
+            placeholder="Password"
+            autocomplete="current-password"
+            required
+            [ngModel]="password()"
+            (ngModelChange)="password.set($event)"
+            [disabled]="loading()"
+          />
+        </label>
+
+        <button
+          type="submit"
+          class="btn btn-primary mt-2"
+          [disabled]="loading() || !username() || !password()"
+        >
+          @if (loading()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          Sign in
+        </button>
+      </form>
+
+      <div class="mt-4 rounded-box bg-base-200 p-3 text-xs text-base-content/70">
+        <p class="font-semibold">Demo accounts</p>
+        <p>operator / operator</p>
+        <p>participant / participant</p>
+      </div>
+    </div>
+  </div>
+</div>
