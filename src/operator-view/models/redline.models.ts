@@ -12,6 +12,17 @@ export interface RedlineConfig {
   baseUrl: string;
 }
 
+/**
+ * Response of the Redline health endpoint (`GET /api/public/health`).
+ *
+ * The endpoint returns a JSON object of string values; the `status` field
+ * carries the overall health (e.g. `"UP"` when the application is healthy).
+ */
+export interface HealthResponse {
+  status?: string;
+  [key: string]: string | undefined;
+}
+
 /** Request body to create a new service provider. */
 export interface ServiceProvider {
   name: string;

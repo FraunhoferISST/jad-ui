@@ -6,6 +6,7 @@ import { REDLINE_CONFIG } from '../redline.config';
 import {
   DataspaceRequest,
   DataspaceResponse,
+  HealthResponse,
   Participant,
   ParticipantDeployment,
   ServiceProvider,
@@ -29,6 +30,35 @@ export class RedlineService {
   /** Base URL of the Redline UI API (without trailing slash). */
   private get apiUrl(): string {
     return `${this.config.baseUrl.replace(/\/$/, '')}/api/ui`;
+  }
+
+  // --- Server info ---------------------------------------------------------
+
+  /**
+   * Calls the Redline health endpoint (`GET /api/public/health`).
+   * @returns A promise resolving to the raw health response.
+   */
+  getHealth(): Promise<HealthResponse> {
+    debugger
+    const baseUrl = this.config.baseUrl.replace(/\/$/, '');
+    return firstValueFrom(this.http.get<HealthResponse>(`${baseUrl}/api/public/health`));
+  }
+
+  /**
+   * Checks whether the Redline backend is healthy by calling its health
+   * endpoint and inspecting the reported `status`.
+   * @returns A promise resolving to `true` when the status is `UP`, and
+   *   `false` when the status is anything else or the request fails.
+   */
+  async checkHealth(): Promise<boolean> {
+    console.log('health check');
+    try {
+      debugger
+      const health = await this.getHealth();
+      return health.status?.toUpperCase() === 'UP';
+    } catch {
+      return false;
+    }
   }
 
   // --- Service providers ---------------------------------------------------

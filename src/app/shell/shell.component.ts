@@ -5,6 +5,7 @@ import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig, Men
 import { AuthService } from '../auth/auth.service';
 import { canAccess } from '../auth/access-rules';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
+import { RedlineService } from '../../operator-view/services/redline.service';
 
 /** Local-storage key the library's DashboardStateService uses to persist the
  * currently selected connector. We clear it on load so the connector is chosen
@@ -32,6 +33,7 @@ export class ShellComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly redlineConfig = inject(REDLINE_CONFIG);
+  private readonly redline = inject(RedlineService);
   private readonly stateService: DashboardStateService;
 
   constructor() {
@@ -65,8 +67,9 @@ export class ShellComponent implements OnInit {
     // Participants talk to the dataspace connectors as usual. Operators do not:
     // their shell surfaces the Redline backend as the single "connector" so the
     // navbar's health indicator reflects the Redline backend's health. The
-    // library calls `${defaultUrl}/check/health`, which the gateway in front of
-    // Redline is expected to route to the Redline health endpoint.
+    // `customHealthCheck` on the EdcConfig calls the Redline health endpoint
+    // directly (`/api/public/health`) and reports healthy only when its status
+    // is "UP".
     const configs$: Promise<EdcConfig[]> =
       this.auth.role() === 'operator'
         ? Promise.resolve([this.toEdcConfig(this.redlineConfig.baseUrl)])
@@ -89,8 +92,10 @@ export class ShellComponent implements OnInit {
   }
 
   /**
-   * Builds the single {@link EdcConfig} that points the dashboard shell (and its
-   * health check) at the Redline backend.
+   * Builds the single {@link EdcConfig} that points the dashboard shell at the
+   * Redline backend. Instead of relying on the library's native EDC health
+   * check, it supplies a {@link EdcConfig.customHealthCheck} that queries the
+   * Redline health endpoint and reports healthy only when its status is "UP".
    */
   private toEdcConfig(baseUrl: string): EdcConfig {
     const url = baseUrl.replace(/\/$/, '');
@@ -100,6 +105,7 @@ export class ShellComponent implements OnInit {
       defaultUrl: url,
       protocolUrl: url,
       federatedCatalogEnabled: false,
+      customHealthCheck: () => this.redline.checkHealth(),
     };
   }
 
