@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AppConfig, DashboardAppComponent, EdcConfig, MenuItem } from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
 import { canAccess } from '../auth/access-rules';
+import { REDLINE_CONFIG } from '../../operator-view/redline.config';
 
 /**
  * Authenticated layout that hosts the dashboard shell (`lib-dashboard-app`).
@@ -25,6 +26,7 @@ import { canAccess } from '../auth/access-rules';
 export class ShellComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
+  private readonly redlineConfig = inject(REDLINE_CONFIG);
 
   protected readonly themes = [
     'light',
@@ -44,12 +46,33 @@ export class ShellComponent implements OnInit {
   protected appConfig?: Promise<AppConfig>;
 
   ngOnInit(): void {
-    this.edcConfigs = firstValueFrom(
-      this.http.get<EdcConfig[]>('config/edc-connector-config.json'),
-    );
+    // Participants talk to the dataspace connectors as usual. Operators do not:
+    // their shell surfaces the Redline backend as the single "connector" so the
+    // navbar's health indicator reflects the Redline backend's health. The
+    // library calls `${defaultUrl}/check/health`, which the gateway in front of
+    // Redline is expected to route to the Redline health endpoint.
+    this.edcConfigs =
+      this.auth.role() === 'operator'
+        ? Promise.resolve([this.toEdcConfig(this.redlineConfig.baseUrl)])
+        : firstValueFrom(this.http.get<EdcConfig[]>('config/edc-connector-config.json'));
     this.appConfig = firstValueFrom(this.http.get<AppConfig>('config/app-config.json')).then(
       config => this.applyRoleMenu(config),
     );
+  }
+
+  /**
+   * Builds the single {@link EdcConfig} that points the dashboard shell (and its
+   * health check) at the Redline backend.
+   */
+  private toEdcConfig(baseUrl: string): EdcConfig {
+    const url = baseUrl.replace(/\/$/, '');
+    return {
+      connectorName: 'Redline',
+      managementUrl: url,
+      defaultUrl: url,
+      protocolUrl: url,
+      federatedCatalogEnabled: false,
+    };
   }
 
   /**
@@ -77,6 +100,10 @@ export class ShellComponent implements OnInit {
       routerPath: 'logout',
     };
 
-    return { ...config, menuItems: [...items, logoutItem] };
+    // Operators see the dedicated "JAD Operator" title; everyone else keeps the
+    // title from the shared config (or the library default).
+    const appTitle = role === 'operator' ? 'JAD Operator' : config.appTitle;
+
+    return { ...config, appTitle, menuItems: [...items, logoutItem] };
   }
 }
