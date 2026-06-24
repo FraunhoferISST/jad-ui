@@ -1,13 +1,31 @@
 <div class="card bg-base-200 card-border h-full">
   <div class="card-body gap-4">
     <!-- Tenant header -->
-    <div class="flex items-start justify-between gap-2">
+    <div class="flex items-center justify-between gap-2">
       <div>
         <h2 class="card-title break-all">
           <span class="material-symbols-rounded text-primary">groups</span>
           {{ tenant.name }}
         </h2>
         <p class="text-xs opacity-60">Tenant #{{ tenant.id }} · Provider #{{ tenant.providerId }}</p>
+      </div>
+      <div class="flex flex-col items-end gap-1 shrink-0">
+        @for (participant of tenant.participants; track participant.id) {
+          @if (!allAgentsActive(participant)) {
+            <button
+              type="button"
+              class="btn btn-sm btn-primary btn-soft"
+              [disabled]="isPolling(participant)"
+              (click)="deploy.emit(participant)">
+              @if (isPolling(participant)) {
+                <span class="loading loading-bars loading-sm"></span>
+              } @else {
+                <span class="material-symbols-rounded text-base">rocket_launch</span>
+              }
+              Deploy
+            </button>
+          }
+        }
       </div>
     </div>
 
@@ -49,21 +67,6 @@
               </div>
             </div>
           }
-
-          <div class="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              class="btn btn-sm btn-primary"
-              [disabled]="isPolling(participant)"
-              (click)="deploy.emit(participant)">
-              @if (isPolling(participant)) {
-                <span class="loading loading-bars loading-sm"></span>
-              } @else {
-                <span class="material-symbols-rounded text-base">rocket_launch</span>
-              }
-              Deploy
-            </button>
-          </div>
         </div>
       }
     } @else {

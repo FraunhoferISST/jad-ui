@@ -49,6 +49,15 @@ export class TenantCardComponent {
     return this.pollingParticipantIds.has(participant.id);
   }
 
+  /** Whether the participant has agents and every one of them is ACTIVE. */
+  allAgentsActive(participant: Participant): boolean {
+    const agents = participant.agents ?? [];
+    return (
+      agents.length > 0 &&
+      agents.every(agent => (agent.state ?? '').toUpperCase() === 'ACTIVE')
+    );
+  }
+
   /** Maps an agent state to a daisyUI badge color class. */
   agentBadgeColor(agent: VirtualParticipantAgent): string {
     switch ((agent.state ?? '').toUpperCase()) {
