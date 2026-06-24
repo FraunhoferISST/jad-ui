@@ -7,6 +7,7 @@ import {
   DataspaceResponse,
   TenantRegistration,
 } from '../../models/redline.models';
+import { atLeastOneDataspaceSelected } from '../../validators/dataspace.validators';
 import { generateParticipantDid } from '../../util/did.util';
 import { REDLINE_CONFIG } from '../../redline.config';
 
@@ -36,7 +37,7 @@ export class TenantFormComponent implements OnInit {
 
   readonly form = this.fb.nonNullable.group({
     tenantName: ['', [Validators.required]],
-    dataspaces: this.fb.array<FormGroup>([]),
+    dataspaces: this.fb.array<FormGroup>([], atLeastOneDataspaceSelected),
   });
 
   properties: Record<string, any> = {};

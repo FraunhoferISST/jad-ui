@@ -20,6 +20,7 @@ export const ACCESS_RULES: Record<string, Role[]> = {
   contracts: ['participant'],
   'transfer-history': ['participant'],
   tenants: ['operator'],
+  'open-registrations': ['operator'],
 };
 
 /**

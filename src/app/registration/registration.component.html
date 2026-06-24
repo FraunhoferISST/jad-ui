@@ -1,0 +1,117 @@
+<div class="flex min-h-screen items-center justify-center bg-base-200 p-4">
+  <div class="card w-full max-w-lg bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h1 class="card-title justify-center text-2xl">Request Tenant</h1>
+      <p class="text-center text-sm text-base-content/60">
+        Join dataspaces and submit a tenant registration
+      </p>
+
+      @if (submittedName(); as name) {
+        <div role="alert" class="alert alert-success alert-soft mt-4">
+          <span class="material-symbols-rounded">check_circle</span>
+          <span>
+            Registration for <span class="font-semibold">{{ name }}</span> submitted. The service provider
+            will review your applciation.
+          </span>
+        </div>
+        <a routerLink="/login" class="btn btn-primary btn-block mt-4">
+          <span class="material-symbols-rounded">arrow_back</span>
+          Back to sign in
+        </a>
+      } @else {
+        @if (error()) {
+          <div role="alert" class="alert alert-error alert-soft mt-2">
+            <span class="material-symbols-rounded">error</span>
+            <span>{{ error() }}</span>
+          </div>
+        }
+
+        @if (loadingOptions()) {
+          <div class="flex justify-center py-10">
+            <span class="loading loading-bars loading-lg text-primary"></span>
+          </div>
+        } @else {
+          <form class="mt-2 flex flex-col gap-4" [formGroup]="form" (ngSubmit)="submit()">
+            <fieldset class="fieldset w-full rounded-box border border-base-300 bg-base-200 p-4">
+              <legend class="fieldset-legend text-sm">
+                Tenant Data
+              </legend>
+
+              <legend class="fieldset-label">Service Provider</legend>
+              <label class="select w-full" [ngClass]="form.get('serviceProviderId')?.invalid ? 'select-error' : ''">
+                <span class="label">Provider</span>
+                <select class="w-full" formControlName="serviceProviderId">
+                  <option [ngValue]="null" disabled>Select a service provider ...</option>
+                  @for (provider of serviceProviders(); track provider.id) {
+                    <option [ngValue]="provider.id">{{ provider.name }} (#{{ provider.id }})</option>
+                  }
+                </select>
+                @if (serviceProviders().length === 0) {
+                  <span class="text-xs text-warning">
+                    No service providers available yet. Please try again later.
+                  </span>
+                }
+              </label>
+              @if (form.get('serviceProviderId')?.invalid) {
+                <p class="fieldset-label text-error">Required</p>
+              }
+
+              <legend class="fieldset-label">Tenant Name</legend>
+              <label class="input input-bordered w-full">
+                  <input
+                    type="text"
+                    class="grow"
+                    placeholder="Tenant name"
+                    formControlName="tenantName" />
+                  <span class="badge badge-error">Required</span>
+              </label>
+            </fieldset>
+
+            <fieldset class="fieldset w-full rounded-box border border-base-300 bg-base-200 p-4">
+              <legend class="fieldset-legend text-sm">
+                Dataspaces
+              </legend>
+              @if (dataspacesArray.length === 0) {
+                <div role="alert" class="alert alert-warning alert-soft">
+                  <span class="material-symbols-rounded">info</span>
+                  <span>No dataspaces available to join. Registration is not possible yet.</span>
+                </div>
+              } @else {
+                <div formArrayName="dataspaces" class="flex flex-col gap-2">
+                  @for (group of dataspacesArray.controls; track $index) {
+                    <div
+                      [formGroupName]="$index"
+                      class="rounded-box border border-base-300 bg-base-100 p-3">
+                      <label class="label cursor-pointer justify-start gap-2">
+                        <input type="checkbox" class="checkbox checkbox-sm" formControlName="selected" />
+                        <span class="font-medium">{{ group.value.name }}</span>
+                        <span class="text-xs opacity-60">#{{ group.value.dataspaceId }}</span>
+                      </label>
+                    </div>
+                  }
+                </div>
+                @if (dataspacesArray.invalid) {
+                  <p class="text-xs text-error mt-1">Select at least one dataspace.</p>
+                }
+              }
+            </fieldset>
+
+            <button
+              type="submit"
+              class="btn btn-primary mt-2"
+              [disabled]="form.invalid || submitting()">
+              @if (submitting()) {
+                <span class="loading loading-spinner loading-sm"></span>
+              }
+              Submit Registration
+            </button>
+
+            <a routerLink="/login" class="link link-hover text-center text-sm text-base-content/60">
+              Back to sign in
+            </a>
+          </form>
+        }
+      }
+    </div>
+  </div>
+</div>

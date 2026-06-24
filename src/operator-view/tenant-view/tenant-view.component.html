@@ -21,26 +21,28 @@
     <span class="material-symbols-rounded">domain_add</span>
     Provider
   </button>
-  <button
-    class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
-    (click)="openCreateDataspace()">
-    <span class="material-symbols-rounded">hub</span>
-    Dataspace
-  </button>
-  <button
-    class="mr-4 btn btn-lg btn-primary rounded-2xl btn-soft shadow-xl !text-sm border-none"
-    [disabled]="selectedProviderId() === null"
-    (click)="openRegisterTenant()">
-    <span class="material-symbols-rounded">person_add</span>
-    Register tenant
-  </button>
+  @if (mode() === 'open') {
+    <button
+      class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
+      (click)="openCreateDataspace()">
+      <span class="material-symbols-rounded">hub</span>
+      Dataspace
+    </button>
+    <button
+      class="mr-4 btn btn-lg btn-primary rounded-2xl btn-soft shadow-xl !text-sm border-none"
+      [disabled]="selectedProviderId() === null"
+      (click)="openRegisterTenant()">
+      <span class="material-symbols-rounded">person_add</span>
+      Register tenant
+    </button>
+  }
 
   <lib-item-count-selector
     class="mr-4"
     [currentItemCount]="pageItemCount"
     (itemCountChanged)="pageItemCount = $event"></lib-item-count-selector>
   <lib-pagination
-    [items]="filteredTenants()"
+    [items]="visibleTenants()"
     [pageItemCount]="pageItemCount"
     (pageItems)="paginationEvent($event)"
     class="shadow-xl rounded-2xl bg-base-300 [&_button:hover]:bg-base-100 [&_.join>button]:first:rounded-l-2xl [&_.join>button]:last:rounded-r-2xl"></lib-pagination>
@@ -52,11 +54,12 @@
       class="rounded-2xl shadow-xl [&_>.card]:h-full"
       [tenant]="tenant"
       [dataspaces]="dataspaces()"
+      [canDeploy]="mode() === 'open'"
       [pollingParticipantIds]="pollingParticipantIds()"
       (deploy)="deployParticipant(tenant, $event)"
       (registerDataPlane)="registerDataPlane(tenant, $event)"></tenant-card>
   }
-  @if (filteredTenants().length == 0) {
+  @if (visibleTenants().length == 0) {
     <div class="skeleton flex justify-center items-center h-72 shadow-xl rounded-2xl">
       @if (!fetched()) {
         <span class="loading loading-bars loading-lg opacity-75 text-primary"></span>
@@ -67,12 +70,19 @@
             New provider
           </button>
         </div>
-      } @else {
-        <div class="tooltip tooltip-open tooltip-primary" data-tip="No tenants yet! Register your first ...">
+      } @else if (mode() === 'open') {
+        <div class="tooltip tooltip-open tooltip-primary" data-tip="No open registrations! Register your first ...">
           <button class="btn btn-primary btn-dash" (click)="openRegisterTenant()">
             <span class="material-symbols-rounded">person_add</span>
             Register tenant
           </button>
+        </div>
+      } @else {
+        <div class="tooltip tooltip-open tooltip-primary" data-tip="No deployed tenants yet. Deploy one from Open Registrations ...">
+          <span class="flex items-center gap-2 opacity-70">
+            <span class="material-symbols-rounded">groups</span>
+            No deployed tenants
+          </span>
         </div>
       }
     </div>

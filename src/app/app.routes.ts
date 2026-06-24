@@ -9,6 +9,14 @@ export const routes: Routes = [
     loadComponent: () => import('./login/login.component').then(m => m.LoginComponent),
   },
   {
+    // Public, unauthenticated tenant-registration request form. Rendered
+    // outside the dashboard shell (like /login). Submitted registrations show
+    // up for operators under the "Open Registrations" view.
+    path: 'register',
+    loadComponent: () =>
+      import('./registration/registration.component').then(m => m.RegistrationComponent),
+  },
+  {
     // Side-effect-only route: clears the session and redirects to /login.
     path: 'logout',
     canActivate: [logoutGuard],
@@ -66,6 +74,15 @@ export const routes: Routes = [
       },
       {
         path: 'tenants',
+        data: { mode: 'deployed' },
+        loadComponent: () =>
+          import('../operator-view/tenant-view/tenant-view.component').then(
+            m => m.TenantViewComponent,
+          ),
+      },
+      {
+        path: 'open-registrations',
+        data: { mode: 'open' },
         loadComponent: () =>
           import('../operator-view/tenant-view/tenant-view.component').then(
             m => m.TenantViewComponent,

@@ -1,4 +1,5 @@
 import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import {
   FilterInputComponent,
@@ -33,9 +34,16 @@ const POLL_INTERVAL_MS = 500;
 /** Maximum number of status polls before giving up (~60s at 500ms). */
 const MAX_POLL_ATTEMPTS = 120;
 
+/** View mode: deployed tenants vs. open (not-yet-deployed) registrations. */
+export type TenantViewMode = 'deployed' | 'open';
+
 /**
  * Operator view for managing the Redline tenant hierarchy:
  * service providers, dataspaces, tenants and participants.
+ *
+ * The same component backs two routes, distinguished by the `mode` route data:
+ *  - `deployed`: tenants that have at least one deployed participant agent.
+ *  - `open`: open registrations — tenants registered but not yet deployed.
  */
 @Component({
   selector: 'tenant-view',
@@ -53,6 +61,15 @@ export class TenantViewComponent implements OnInit, OnDestroy {
   private readonly redline = inject(RedlineService);
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly config = inject(REDLINE_CONFIG);
+  private readonly route = inject(ActivatedRoute);
+
+  /**
+   * Which slice of tenants this instance shows, read from the route's `data`.
+   * Defaults to `deployed` when not provided.
+   */
+  readonly mode = signal<TenantViewMode>(
+    (this.route.snapshot.data['mode'] as TenantViewMode) ?? 'deployed',
+  );
 
   /** Active deployment-status poll timers, keyed by participant ID. */
   private readonly pollTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -83,6 +100,23 @@ export class TenantViewComponent implements OnInit, OnDestroy {
         tenant.participants?.some(p => p.identifier?.toLowerCase().includes(text)),
     );
   });
+
+  /**
+   * Tenants matching the current filter, partitioned by {@link mode}. The
+   * `deployed` mode keeps tenants with at least one participant agent; the
+   * `open` mode keeps the rest (registered but not yet deployed).
+   */
+  readonly visibleTenants = computed(() => {
+    const deployedMode = this.mode() === 'deployed';
+    return this.filteredTenants().filter(
+      tenant => this.isDeployed(tenant) === deployedMode,
+    );
+  });
+
+  /** Whether a tenant has at least one participant with a deployed agent. */
+  isDeployed(tenant: Tenant): boolean {
+    return tenant.participants?.some(p => (p.agents?.length ?? 0) > 0) ?? false;
+  }
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadServiceProviders(), this.loadDataspaces()]);

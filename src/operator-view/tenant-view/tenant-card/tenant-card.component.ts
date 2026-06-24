@@ -26,6 +26,9 @@ export class TenantCardComponent {
   /** IDs of participants currently being polled for deployment status. */
   @Input() pollingParticipantIds: ReadonlySet<number> = new Set<number>();
 
+  /** Whether the deploy action is offered for this card's participants. */
+  @Input() canDeploy = true;
+
   /** Emitted when the user requests to deploy a participant. */
   @Output() deploy = new EventEmitter<Participant>();
 
