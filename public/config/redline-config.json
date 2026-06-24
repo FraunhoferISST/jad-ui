@@ -1,3 +1,4 @@
 {
-  "baseUrl": "http://jad.localhost/redline"
+  "baseUrl": "http://jad.localhost/redline",
+  "didPrefix": "did:web:identityhub%3A7083:"
 }

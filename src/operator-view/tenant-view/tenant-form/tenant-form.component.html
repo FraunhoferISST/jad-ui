@@ -14,6 +14,17 @@
       <input type="text" class="grow" placeholder="Tenant Name" formControlName="tenantName" />
       <span class="badge badge-error">Required</span>
     </label>
+
+    <legend class="fieldset-label">Generated DID</legend>
+    <label class="input flex items-center w-full">
+      <span class="material-symbols-rounded opacity-50">badge</span>
+      <input
+        type="text"
+        class="grow"
+        readonly
+        placeholder="Enter a tenant name to generate a DID"
+        [value]="generatedDid" />
+    </label>
   </fieldset>
 
   <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">

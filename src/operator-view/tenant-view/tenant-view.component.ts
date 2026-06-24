@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   FilterInputComponent,
@@ -21,6 +21,17 @@ import { TenantCardComponent } from './tenant-card/tenant-card.component';
 import { ServiceProviderFormComponent } from './service-provider-form/service-provider-form.component';
 import { DataspaceFormComponent } from './dataspace-form/dataspace-form.component';
 import { TenantFormComponent } from './tenant-form/tenant-form.component';
+import { generateParticipantDid } from '../util/did.util';
+import { REDLINE_CONFIG } from '../redline.config';
+
+/** Agent states that are considered terminal for deployment polling. */
+const TERMINAL_AGENT_STATES = ['ACTIVE', 'ERROR', 'FAILED', 'DISPOSED'];
+
+/** Interval between participant status polls, in milliseconds. */
+const POLL_INTERVAL_MS = 500;
+
+/** Maximum number of status polls before giving up (~60s at 500ms). */
+const MAX_POLL_ATTEMPTS = 120;
 
 /**
  * Operator view for managing the Redline tenant hierarchy:
@@ -38,9 +49,16 @@ import { TenantFormComponent } from './tenant-form/tenant-form.component';
   ],
   templateUrl: './tenant-view.component.html',
 })
-export class TenantViewComponent implements OnInit {
+export class TenantViewComponent implements OnInit, OnDestroy {
   private readonly redline = inject(RedlineService);
   private readonly modalAndAlert = inject(ModalAndAlertService);
+  private readonly config = inject(REDLINE_CONFIG);
+
+  /** Active deployment-status poll timers, keyed by participant ID. */
+  private readonly pollTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+  /** IDs of participants currently being polled, exposed to the cards. */
+  readonly pollingParticipantIds = signal<ReadonlySet<number>>(new Set<number>());
 
   readonly serviceProviders = signal<ServiceProviderResponse[]>([]);
   readonly dataspaces = signal<DataspaceResponse[]>([]);
@@ -68,6 +86,13 @@ export class TenantViewComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadServiceProviders(), this.loadDataspaces()]);
+  }
+
+  ngOnDestroy(): void {
+    for (const timer of this.pollTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pollTimers.clear();
   }
 
   private async loadServiceProviders(): Promise<void> {
@@ -235,20 +260,116 @@ export class TenantViewComponent implements OnInit {
       return;
     }
     try {
+      // The participant is deployed with a did:web identifier derived from the
+      // tenant name.
+      const identifier = generateParticipantDid(tenant.name, this.config.didPrefix) || participant.identifier;
       await this.redline.deployParticipant(providerId, tenant.id, participant.id, {
         participantId: participant.id,
-        identifier: participant.identifier,
+        identifier,
       });
       await this.loadTenants(providerId);
       this.modalAndAlert.showAlert(
-        `Participant "${participant.identifier}" deployment triggered.`,
+        `Participant "${identifier}" deployment triggered.`,
         'Success',
         'success',
         5,
       );
+      this.startPollingParticipant(providerId, tenant.id, participant.id);
     } catch (error) {
       this.showError('Failed to deploy participant', error);
     }
+  }
+
+  /**
+   * Polls a participant's status every {@link POLL_INTERVAL_MS} after a
+   * deployment, updating its agents live in the view until every agent reaches
+   * a terminal state ({@link TERMINAL_AGENT_STATES}) or the attempt cap is hit.
+   */
+  private startPollingParticipant(
+    providerId: number,
+    tenantId: number,
+    participantId: number,
+  ): void {
+    // Cancel any in-flight poll for this participant before starting a new one.
+    this.stopPollingParticipant(participantId);
+
+    let attempts = 0;
+    const poll = async (): Promise<void> => {
+      attempts += 1;
+      try {
+        const participant = await this.redline.getParticipant(
+          providerId,
+          tenantId,
+          participantId,
+        );
+        this.updateParticipantInTenants(tenantId, participant);
+
+        if (this.allAgentsTerminal(participant) || attempts >= MAX_POLL_ATTEMPTS) {
+          this.stopPollingParticipant(participantId);
+          return;
+        }
+      } catch (error) {
+        this.stopPollingParticipant(participantId);
+        this.showError('Failed to poll participant status', error);
+        return;
+      }
+      this.pollTimers.set(participantId, setTimeout(() => void poll(), POLL_INTERVAL_MS));
+    };
+
+    this.pollTimers.set(participantId, setTimeout(() => void poll(), POLL_INTERVAL_MS));
+    this.markPolling(participantId, true);
+  }
+
+  /** Stops and clears any active poll timer for the given participant. */
+  private stopPollingParticipant(participantId: number): void {
+    const timer = this.pollTimers.get(participantId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.pollTimers.delete(participantId);
+    }
+    this.markPolling(participantId, false);
+  }
+
+  /** Adds or removes a participant ID from the polling-state signal. */
+  private markPolling(participantId: number, polling: boolean): void {
+    this.pollingParticipantIds.update(ids => {
+      const next = new Set(ids);
+      if (polling) {
+        next.add(participantId);
+      } else {
+        next.delete(participantId);
+      }
+      return next;
+    });
+  }
+
+  /** Whether every agent of a participant has reached a terminal state. */
+  private allAgentsTerminal(participant: Participant): boolean {
+    const agents = participant.agents ?? [];
+    if (agents.length === 0) {
+      return true;
+    }
+    return agents.every(agent =>
+      TERMINAL_AGENT_STATES.includes((agent.state ?? '').toUpperCase()),
+    );
+  }
+
+  /** Immutably replaces a participant within the loaded tenants signal. */
+  private updateParticipantInTenants(tenantId: number, participant: Participant): void {
+    const replace = (tenant: Tenant): Tenant => {
+      if (tenant.id !== tenantId) {
+        return tenant;
+      }
+      return {
+        ...tenant,
+        participants: tenant.participants?.map(existing =>
+          existing.id === participant.id ? participant : existing,
+        ),
+      };
+    };
+    this.tenants.update(tenants => tenants.map(replace));
+    // Keep the currently displayed page in sync so the card re-renders live.
+    this.pageTenants.update(tenants => tenants.map(replace));
   }
 
   async registerDataPlane(tenant: Tenant, participant: Participant): Promise<void> {

@@ -10,6 +10,7 @@ import { RedlineConfig } from './models/redline.models';
  */
 const DEFAULT_REDLINE_CONFIG: RedlineConfig = {
   baseUrl: 'http://localhost:8081',
+  didPrefix: 'did:web:identityhub%3A7083:',
 };
 
 /**
@@ -44,6 +45,9 @@ export function provideRedline(configUrl = 'config/redline-config.json'): (Provi
         if (loaded?.baseUrl) {
           // Mutate in place so the already-injected reference stays valid.
           config.baseUrl = loaded.baseUrl;
+        }
+        if (loaded?.didPrefix) {
+          config.didPrefix = loaded.didPrefix;
         }
       } catch {
         // Keep the default configuration when the file is missing/invalid.

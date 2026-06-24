@@ -9,9 +9,6 @@
         </h2>
         <p class="text-xs opacity-60">Tenant #{{ tenant.id }} · Provider #{{ tenant.providerId }}</p>
       </div>
-      <span class="badge badge-neutral badge-sm">
-        {{ tenant.participants?.length ?? 0 }} participant(s)
-      </span>
     </div>
 
     <!-- Participants -->
@@ -19,22 +16,9 @@
       @for (participant of tenant.participants; track participant.id) {
         <div class="rounded-box bg-base-100 p-3 flex flex-col gap-3">
           <div>
-            <p class="font-medium break-all">{{ participant.identifier }}</p>
+            <p class="font-bold break-all">{{ participant.identifier }}</p>
             <p class="text-xs opacity-60">Participant #{{ participant.id }}</p>
           </div>
-
-          @if (participant.agents?.length) {
-            <div>
-              <p class="text-xs font-semibold opacity-70 mb-1">Agents</p>
-              <div class="flex flex-wrap gap-1">
-                @for (agent of participant.agents; track agent.id) {
-                  <span class="badge badge-sm" [class]="agentBadgeColor(agent)">
-                    {{ agent.type }}: {{ agent.state }}
-                  </span>
-                }
-              </div>
-            </div>
-          }
 
           @if (participant.dataspaceInfos?.length) {
             <div>
@@ -42,7 +26,8 @@
               <div class="flex flex-wrap gap-1">
                 @for (info of participant.dataspaceInfos; track info.id ?? info.dataspaceId) {
                   <span class="badge badge-sm badge-outline">
-                    #{{ info.dataspaceId }}
+                    {{ dataspaceName(info.dataspaceId) ?? 'Unknown' }}
+                    <span class="opacity-60">#{{ info.dataspaceId }}</span>
                     @if (info.roles?.length) {
                       <span class="opacity-70">({{ info.roles?.join(', ') }})</span>
                     }
@@ -52,13 +37,30 @@
             </div>
           }
 
+          @if (participant.agents?.length) {
+            <div>
+              <p class="text-xs font-semibold opacity-70 mb-1">Agents</p>
+              <div class="flex flex-col items-start gap-1">
+                @for (agent of sortedAgents(participant); track agent.id) {
+                  <span class="badge badge-sm" [class]="agentBadgeColor(agent)">
+                    {{ agent.type }}: {{ agent.state }}
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
           <div class="flex flex-wrap justify-end gap-2">
-            <button type="button" class="btn btn-sm btn-outline" (click)="registerDataPlane.emit(participant)">
-              <span class="material-symbols-rounded text-base">dns</span>
-              Register data plane
-            </button>
-            <button type="button" class="btn btn-sm btn-primary" (click)="deploy.emit(participant)">
-              <span class="material-symbols-rounded text-base">rocket_launch</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              [disabled]="isPolling(participant)"
+              (click)="deploy.emit(participant)">
+              @if (isPolling(participant)) {
+                <span class="loading loading-bars loading-sm"></span>
+              } @else {
+                <span class="material-symbols-rounded text-base">rocket_launch</span>
+              }
               Deploy
             </button>
           </div>

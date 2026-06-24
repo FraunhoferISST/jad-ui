@@ -51,6 +51,8 @@
     <tenant-card
       class="rounded-2xl shadow-xl [&_>.card]:h-full"
       [tenant]="tenant"
+      [dataspaces]="dataspaces()"
+      [pollingParticipantIds]="pollingParticipantIds()"
       (deploy)="deployParticipant(tenant, $event)"
       (registerDataPlane)="registerDataPlane(tenant, $event)"></tenant-card>
   }

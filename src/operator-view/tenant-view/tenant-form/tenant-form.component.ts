@@ -7,6 +7,8 @@ import {
   DataspaceResponse,
   TenantRegistration,
 } from '../../models/redline.models';
+import { generateParticipantDid } from '../../util/did.util';
+import { REDLINE_CONFIG } from '../../redline.config';
 
 /**
  * Form for registering a new tenant under a service provider. Allows selecting
@@ -21,6 +23,7 @@ import {
 })
 export class TenantFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
+  private readonly config = inject(REDLINE_CONFIG);
 
   /** Dataspaces available for the tenant to join. */
   @Input() dataspaces: DataspaceResponse[] = [];
@@ -40,6 +43,15 @@ export class TenantFormComponent implements OnInit {
 
   get dataspacesArray(): FormArray<FormGroup> {
     return this.form.controls.dataspaces;
+  }
+
+  /**
+   * Live DID derived from the currently entered tenant name, shown read-only in
+   * the form. This is the `identifier` the participant will be deployed with.
+   * Empty while no (non-blank) tenant name has been entered.
+   */
+  get generatedDid(): string {
+    return generateParticipantDid(this.form.controls.tenantName.value, this.config.didPrefix);
   }
 
   ngOnInit(): void {

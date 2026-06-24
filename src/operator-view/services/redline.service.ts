@@ -39,7 +39,6 @@ export class RedlineService {
    * @returns A promise resolving to the raw health response.
    */
   getHealth(): Promise<HealthResponse> {
-    debugger
     const baseUrl = this.config.baseUrl.replace(/\/$/, '');
     return firstValueFrom(this.http.get<HealthResponse>(`${baseUrl}/api/public/health`));
   }
@@ -53,7 +52,6 @@ export class RedlineService {
   async checkHealth(): Promise<boolean> {
     console.log('health check');
     try {
-      debugger
       const health = await this.getHealth();
       return health.status?.toUpperCase() === 'UP';
     } catch {

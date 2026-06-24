@@ -10,6 +10,12 @@
 export interface RedlineConfig {
   /** Base URL of the Redline backend (e.g. `http://localhost:8081`). */
   baseUrl: string;
+  /**
+   * Prefix used when generating a participant DID from a tenant name. The
+   * slugified tenant name is appended to this prefix (e.g.
+   * `did:web:identityhub%3A7083:`).
+   */
+  didPrefix: string;
 }
 
 /**
