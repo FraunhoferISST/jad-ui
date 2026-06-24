@@ -15,19 +15,7 @@
     class="mr-4 grow"
     (inputChange)="filter($event)"></lib-filter-input>
 
-  <button
-    class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
-    (click)="openCreateProvider()">
-    <span class="material-symbols-rounded">domain_add</span>
-    Provider
-  </button>
   @if (mode() === 'open') {
-    <button
-      class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
-      (click)="openCreateDataspace()">
-      <span class="material-symbols-rounded">hub</span>
-      Dataspace
-    </button>
     <button
       class="mr-4 btn btn-lg btn-primary rounded-2xl btn-soft shadow-xl !text-sm border-none"
       [disabled]="selectedProviderId() === null"
@@ -36,6 +24,18 @@
       Register tenant
     </button>
   }
+  <button
+    class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
+    (click)="openCreateProvider()">
+    <span class="material-symbols-rounded">domain_add</span>
+    Provider
+  </button>
+  <button
+    class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
+    (click)="openCreateDataspace()">
+    <span class="material-symbols-rounded">hub</span>
+    Dataspace
+  </button>
 
   <lib-item-count-selector
     class="mr-4"

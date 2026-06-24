@@ -47,16 +47,16 @@
       "divider": true
     },
     {
-      "text": "Tenants",
-      "materialSymbol": "groups",
-      "routerPath": "tenants",
-      "viewDescription": "The tenants view lists deployed tenants — those whose participants already have running agents. You can monitor each tenant's participants, agents and dataspace memberships, and register data planes for them."
-    },
-    {
       "text": "Open Registrations",
       "materialSymbol": "how_to_reg",
       "routerPath": "open-registrations",
       "viewDescription": "The open registrations view lists tenants that have been registered but are not deployed yet, including requests submitted via the public registration form. From here operators manage the Redline backend hierarchy (service providers, dataspaces), register new tenants, and deploy a tenant's participants to move them into the Tenants view."
+    },
+    {
+      "text": "Tenants",
+      "materialSymbol": "groups",
+      "routerPath": "tenants",
+      "viewDescription": "The tenants view lists deployed tenants — those whose participants already have running agents. You can monitor each tenant's participants, agents and dataspace memberships, and register data planes for them."
     }
   ]
 }

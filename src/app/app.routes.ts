@@ -73,16 +73,16 @@ export const routes: Routes = [
           import('@eclipse-edc/dashboard-core/transfer').then(m => m.TransferHistoryViewComponent),
       },
       {
-        path: 'tenants',
-        data: { mode: 'deployed' },
+        path: 'open-registrations',
+        data: { mode: 'open' },
         loadComponent: () =>
           import('../operator-view/tenant-view/tenant-view.component').then(
             m => m.TenantViewComponent,
           ),
       },
       {
-        path: 'open-registrations',
-        data: { mode: 'open' },
+        path: 'tenants',
+        data: { mode: 'deployed' },
         loadComponent: () =>
           import('../operator-view/tenant-view/tenant-view.component').then(
             m => m.TenantViewComponent,

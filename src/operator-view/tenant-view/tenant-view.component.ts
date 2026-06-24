@@ -84,7 +84,7 @@ export class TenantViewComponent implements OnInit, OnDestroy {
   readonly filterText = signal('');
   readonly fetched = signal(false);
 
-  pageItemCount = 12;
+  pageItemCount = 15;
   readonly pageTenants = signal<Tenant[]>([]);
 
   readonly filteredTenants = computed(() => {
