@@ -1,9 +1,10 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig, MenuItem } from '@eclipse-edc/dashboard-core';
+import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig } from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
 import { canAccess } from '../auth/access-rules';
+import { UserMenuComponent } from './user-menu.component';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
 import { RedlineService } from '../../operator-view/services/redline.service';
 
@@ -20,8 +21,12 @@ const CURRENT_CONNECTOR_KEY = 'currentConnector';
  * given. This component therefore:
  *  - loads the base configuration like the previous root component did, and
  *  - filters the menu items by the current user's role (using the same
- *    {@link ACCESS_RULES} the route guard uses) and appends a logout entry,
- * before passing the configuration to the shell.
+ *    {@link ACCESS_RULES} the route guard uses) before passing the
+ *    configuration to the shell.
+ *
+ * Logout is no longer a sidebar menu item; it lives in the navbar-end region as
+ * the {@link UserMenuComponent} user dropdown, injected via the library's
+ * `navbarEndComponents` input.
  */
 @Component({
   selector: 'app-shell',
@@ -62,6 +67,11 @@ export class ShellComponent implements OnInit {
 
   protected edcConfigs?: Promise<EdcConfig[]>;
   protected appConfig?: Promise<AppConfig>;
+
+  /** Components injected into the shell navbar's end region. The user dropdown
+   * (with the logout action) is rendered there via the library's
+   * `navbarEndComponents` input. */
+  protected readonly navbarEndComponents = [UserMenuComponent];
 
   ngOnInit(): void {
     // Participants talk to the dataspace connectors as usual. Operators do not:
@@ -111,33 +121,20 @@ export class ShellComponent implements OnInit {
 
   /**
    * Returns a copy of the config whose menu only contains items the current
-   * role may access, with a logout entry appended.
+   * role may access. Logout is not part of the menu; it lives in the navbar
+   * user dropdown ({@link UserMenuComponent}).
    */
   private applyRoleMenu(config: AppConfig): AppConfig {
     const role = this.auth.role();
 
-    const visibleItems = (config.menuItems ?? []).filter(item =>
-      canAccess(item.routerPath, role),
-    );
-
-    // Force a divider after the last role-visible item so the appended logout
-    // entry is visually separated from the regular navigation items. Copy each
-    // item first to avoid mutating the loaded config.
-    const items = visibleItems.map(item => ({ ...item }));
-    if (items.length > 0) {
-      items[items.length - 1].divider = true;
-    }
-
-    const logoutItem: MenuItem = {
-      text: 'Logout',
-      materialSymbol: 'logout',
-      routerPath: 'logout',
-    };
+    const items = (config.menuItems ?? [])
+      .filter(item => canAccess(item.routerPath, role))
+      .map(item => ({ ...item }));
 
     // Operators see the dedicated "JAD Operator" title; everyone else keeps the
     // title from the shared config (or the library default).
     const appTitle = role === 'operator' ? 'JAD Operator' : config.appTitle;
 
-    return { ...config, appTitle, menuItems: [...items, logoutItem] };
+    return { ...config, appTitle, menuItems: items };
   }
 }

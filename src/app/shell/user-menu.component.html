@@ -1,0 +1,28 @@
+<div class="dropdown dropdown-end">
+  <div
+    tabindex="0"
+    role="button"
+    class="btn btn-lg btn-circle btn-ghost m-1 hover:text-primary-content hover:bg-primary border-none"
+    [attr.aria-label]="label()"
+  >
+    <span class="material-symbols-rounded h-7 w-7 !text-[1.75rem]">account_circle</span>
+  </div>
+  <ul
+    tabindex="0"
+    class="dropdown-content menu bg-base-100 text-base-content z-1 rounded-box p-2 shadow-2xl"
+  >
+    @if (user(); as currentUser) {
+      <li class="menu-title flex flex-col items-start gap-0">
+        <span class="text-base-content font-medium">{{ label() }}</span>
+        <span class="text-base-content/60 text-xs capitalize">{{ currentUser.role }}</span>
+      </li>
+      <div class="divider my-1"></div>
+    }
+    <li>
+      <a routerLink="/logout" class="text-error">
+        <span class="material-symbols-rounded">logout</span>
+        Logout
+      </a>
+    </li>
+  </ul>
+</div>
