@@ -6,6 +6,7 @@ import {
   Tenant,
   VirtualParticipantAgent,
 } from '../../models/redline.models';
+import { isParticipantActive } from '../../util/deployment.util';
 
 /**
  * Card combining a tenant with its participant(s). Shows the tenant header
@@ -54,11 +55,7 @@ export class TenantCardComponent {
 
   /** Whether the participant has agents and every one of them is ACTIVE. */
   allAgentsActive(participant: Participant): boolean {
-    const agents = participant.agents ?? [];
-    return (
-      agents.length > 0 &&
-      agents.every(agent => (agent.state ?? '').toUpperCase() === 'ACTIVE')
-    );
+    return isParticipantActive(participant);
   }
 
   /** Maps an agent state to a daisyUI badge color class. */

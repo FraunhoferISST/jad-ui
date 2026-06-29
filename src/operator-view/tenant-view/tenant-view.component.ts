@@ -23,6 +23,7 @@ import { ServiceProviderFormComponent } from './service-provider-form/service-pr
 import { DataspaceFormComponent } from './dataspace-form/dataspace-form.component';
 import { TenantFormComponent } from './tenant-form/tenant-form.component';
 import { generateParticipantDid } from '../util/did.util';
+import { isTenantDeployed } from '../util/deployment.util';
 import { REDLINE_CONFIG } from '../redline.config';
 
 /** Agent states that are considered terminal for deployment polling. */
@@ -103,20 +104,15 @@ export class TenantViewComponent implements OnInit, OnDestroy {
 
   /**
    * Tenants matching the current filter, partitioned by {@link mode}. The
-   * `deployed` mode keeps tenants with at least one participant agent; the
-   * `open` mode keeps the rest (registered but not yet deployed).
+   * `deployed` mode keeps fully-deployed tenants (every participant agent
+   * `ACTIVE`); the `open` mode keeps the rest (registered, not yet deployed).
    */
   readonly visibleTenants = computed(() => {
     const deployedMode = this.mode() === 'deployed';
     return this.filteredTenants().filter(
-      tenant => this.isDeployed(tenant) === deployedMode,
+      tenant => isTenantDeployed(tenant) === deployedMode,
     );
   });
-
-  /** Whether a tenant has at least one participant with a deployed agent. */
-  isDeployed(tenant: Tenant): boolean {
-    return tenant.participants?.some(p => (p.agents?.length ?? 0) > 0) ?? false;
-  }
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadServiceProviders(), this.loadDataspaces()]);
