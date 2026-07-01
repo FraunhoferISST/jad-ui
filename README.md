@@ -105,6 +105,14 @@ can be replaced per environment without rebuilding:
 If `redline-config.json` is missing or invalid, JAD UI falls back to built-in
 defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 
+Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
+Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
+
+After deploying JAD or after deploying new participants or the tokens expired (1h TTL), run the script to update the EDC connector config:
+```sh
+./create-edc-connector-config.sh
+```
+
 ## Authentication & roles
 
 Auth is abstracted behind `AuthProvider`. The shipped `CredentialsAuthProvider`
@@ -125,6 +133,8 @@ Both can access Home. Access is defined once in
 
 **Switching to OAuth/OIDC:** implement `AuthProvider` and change the binding in
 `src/app/auth/auth.config.ts` (`provideAuth()`). No other code needs to change.
+
+_Note_: As long as there is no identity provider, the `operator` role can access all service providers and the `participant` role has access to all participants.
 
 ## Project structure
 
