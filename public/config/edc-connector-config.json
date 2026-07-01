@@ -1,20 +1,18 @@
 [
   {
-    "connectorName": "Consumer",
-    "managementUrl": "http://cp-consumer.dataspace/management",
-    "defaultUrl": "http://cp-consumer.dataspace/api",
-    "protocolUrl": "http://cp-consumer.dataspace/protocol/2025-1",
-    "federatedCatalogEnabled": false,
-    "federatedCatalogUrl": "http://fc-consumer.dataspace/catalog",
-    "did": "did:web:ih-consumer.dataspace"
+    "connectorName": "demo-consumer",
+    "managementUrl": "http://jad.localhost/api/management/v5beta/participants/2c5a984deaa4460f921e0cce614b0216",
+    "defaultUrl": "http://jad.localhost/api/management/health",
+    "protocolUrl": "http://controlplane:8082/api/dsp/2c5a984deaa4460f921e0cce614b0216/http-dsp-profile-2025-1",
+    "apiToken": "eyJhbGciOiJFZERTQSIsImtpZCI6InNpZ25pbmctand0bGV0X3BjLTEiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiIyYzVhOTg0ZGVhYTQ0NjBmOTIxZTBjY2U2MTRiMDIxNiIsImlzcyI6Imh0dHA6Ly9qd3RsZXQ6ODA4MCIsImF1ZCI6ImVkY3YiLCJpYXQiOjE3ODI5MDQ0MDIsImV4cCI6MTc4MjkwODAwMiwibmJmIjoxNzgyOTA0NDAyLCJhY3QiOnsiaXNzIjoiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZWRjLXY6Y2ZtLWFnZW50cyJ9LCJzY29wZSI6ImlkZW50aXR5LWFwaTpyZWFkIG1hbmFnZW1lbnQtYXBpOnJlYWQgaXNzdWVyLWFkbWluLWFwaTpyZWFkIHNpZ2xldC1hcGk6cmVhZCBpZGVudGl0eS1hcGk6d3JpdGUgbWFuYWdlbWVudC1hcGk6d3JpdGUgaXNzdWVyLWFkbWluLWFwaTp3cml0ZSJ9.fs4fJJP7JGPeZwcHlzpR81cCCRcWrbRbkENcgXZutTJBl-o08Nk6c7f7P_xuDRxy-tHKEtUZ1fQlK8lt7zuEAw",
+    "did": "did:web:identityhub%3A7083:demo-consumer"
   },
   {
-    "connectorName": "Provider",
-    "managementUrl": "http://cp-provider.dataspace/management",
-    "defaultUrl": "http://cp-provider.dataspace/api",
-    "protocolUrl": "http://cp-provider.dataspace/protocol/2025-1",
-    "federatedCatalogEnabled": false,
-    "federatedCatalogUrl": "http://fc-provider.dataspace/catalog",
-    "did": "did:web:ih-provider.dataspace"
+    "connectorName": "demo-provider",
+    "managementUrl": "http://jad.localhost/api/management/v5beta/participants/1a076a5874974e83927e0bf8c77423a8",
+    "defaultUrl": "http://jad.localhost/api/management/health",
+    "protocolUrl": "http://controlplane:8082/api/dsp/1a076a5874974e83927e0bf8c77423a8/http-dsp-profile-2025-1",
+    "apiToken": "eyJhbGciOiJFZERTQSIsImtpZCI6InNpZ25pbmctand0bGV0X3BjLTEiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxYTA3NmE1ODc0OTc0ZTgzOTI3ZTBiZjhjNzc0MjNhOCIsImlzcyI6Imh0dHA6Ly9qd3RsZXQ6ODA4MCIsImF1ZCI6ImVkY3YiLCJpYXQiOjE3ODI5MDQ0MDIsImV4cCI6MTc4MjkwODAwMiwibmJmIjoxNzgyOTA0NDAyLCJhY3QiOnsiaXNzIjoiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZWRjLXY6Y2ZtLWFnZW50cyJ9LCJzY29wZSI6ImlkZW50aXR5LWFwaTpyZWFkIG1hbmFnZW1lbnQtYXBpOnJlYWQgaXNzdWVyLWFkbWluLWFwaTpyZWFkIHNpZ2xldC1hcGk6cmVhZCBpZGVudGl0eS1hcGk6d3JpdGUgbWFuYWdlbWVudC1hcGk6d3JpdGUgaXNzdWVyLWFkbWluLWFwaTp3cml0ZSJ9.JIIroeTfsl0A0k_aeGqy0qnQMXVBYX1mA_1hjOtPTL-TCuX2QFw3jnpw7WjPFu9osC_741_Td264EZDZdqWcDg",
+    "did": "did:web:identityhub%3A7083:demo-provider"
   }
 ]
