@@ -14,7 +14,7 @@ curl -s -L http://localhost:8081/api/v1/mappings -H "Authorization: Bearer $ST" 
 
   id=$(echo "$obj" | jq -r '.participantContext')
 
-  # Get read+write token for participant form jwtlet
+  # Get read+write token for participant from jwtlet
   token=$(curl -s -X POST \
     -L http://jad.localhost/api/auth/token \
     -H 'content-type: application/x-www-form-urlencoded' \
@@ -40,5 +40,4 @@ curl -s -L http://localhost:8081/api/v1/mappings -H "Authorization: Bearer $ST" 
 
 done | jq -s '.' > ./public/config/edc-connector-config.json
 
-
-# kill $PF_PID
+kill $PF_PID
