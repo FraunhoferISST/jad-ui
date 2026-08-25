@@ -112,9 +112,9 @@ export class ShellComponent implements OnInit {
     return {
       connectorName: 'Redline',
       managementUrl: url,
+      managementApiVersion: 'v1',
       defaultUrl: url,
       protocolUrl: url,
-      federatedCatalogEnabled: false,
       customHealthCheck: () => this.redline.checkHealth(),
     };
   }

@@ -20,11 +20,13 @@ curl -s -L http://localhost:8081/api/v1/mappings -H "Authorization: Bearer $ST" 
     -H 'content-type: application/x-www-form-urlencoded' \
     -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
     -d subject_token=$ST \
+    -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
     -d resource=$id \
     -d "scope=read write" \
     -d "audience=edcv" | jq -r '.access_token')
 
-  mgmt="http://jad.localhost/api/management/v5beta/participants/$id"
+  mgmt="http://jad.localhost/api/management"
+  mgmt_version="v5beta/participants/$id"
   default="http://jad.localhost/api/management/health"
 
   # Get DID document of participant
@@ -34,9 +36,10 @@ curl -s -L http://localhost:8081/api/v1/mappings -H "Authorization: Bearer $ST" 
   dsp=$(echo $jsonDid | jq -r '.service[] | select(.type == "ProtocolEndpoint") | .serviceEndpoint')
 
 
-  jq -n --arg name "$name" --arg mgmt "$mgmt" --arg default "$default" \
+  jq -n --arg name "$name" --arg mgmt "$mgmt" --arg mgmt_version "$mgmt_version" \
+    --arg default "$default" --arg bearer "Bearer $token" \
     --arg token "$token" --arg did "$did" --arg dsp "$dsp" \
-    '{"connectorName": $name, "managementUrl": $mgmt, "defaultUrl": $default, "protocolUrl": $dsp, "apiToken": $token, "did": $did}'
+    '{"connectorName": $name, "managementUrl": $mgmt, "managementApiVersion": $mgmt_version, "defaultUrl": $default, "protocolUrl": $dsp, "protocolVersion": "dataspace-protocol-http:2025-1", "did": $did, "authorization": {"key": "Authorization", "value": $bearer}}'
 
 done | jq -s '.' > ./public/config/edc-connector-config.json
 
