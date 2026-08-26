@@ -11,6 +11,19 @@ function participantSession(overrides: Partial<AuthSession> = {}): AuthSession {
       role: 'participant',
       displayName: 'Participant',
       participantContextId: 'pcx-123',
+      participantEdcConfig: {
+        connectorName: 'demo-provider',
+        managementUrl: 'http://jad.localhost/api/management',
+        managementApiVersion: 'v5beta/participants/pcx-123',
+        defaultUrl: 'http://jad.localhost/api/management/health',
+        protocolUrl: 'http://jad.localhost/api/dsp/pcx-123/http-dsp-profile-2025-1',
+        protocolVersion: 'dataspace-protocol-http:2025-1',
+        did: 'did:web:identity.jad.localhost:demo-provider',
+        authorization: {
+          key: 'Authorization',
+          value: 'Bearer token',
+        },
+      },
     },
     token: 'stub-token',
     ...overrides,
@@ -211,6 +224,24 @@ describe('AuthService', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({ user: { username: 'participant', role: 'participant' }, token: 'x' }),
+      );
+
+      const service = createService();
+
+      expect(service.isAuthenticated()).toBe(false);
+    });
+
+    it('ignores participant session without participantEdcConfig', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          user: {
+            username: 'participant',
+            role: 'participant',
+            participantContextId: 'pcx-123',
+          },
+          token: 'x',
+        }),
       );
 
       const service = createService();

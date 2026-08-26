@@ -132,6 +132,10 @@ export class AuthService {
         return null;
       }
 
+      if (session.user.role === 'participant' && !session.user.participantEdcConfig) {
+        return null;
+      }
+
       if (session.user.role === 'operator' && !session.user.operatorId) {
         return null;
       }

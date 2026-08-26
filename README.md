@@ -34,8 +34,8 @@ deployment, backed by the Redline tenant-management API.
 - **Keycloak SSO auth** — Authentication is implemented via OAuth 2.0 / OIDC
   (Authorization Code + PKCE) against Keycloak and still abstracted behind an
   `AuthProvider` interface.
-- **Runtime config** — Connectors, menu, and backend URLs are loaded from JSON
-  at startup, so the same build can target different environments.
+- **Runtime config** — Menu, auth, and backend URLs are loaded from JSON at
+  startup, so the same build can target different environments.
 - **Multi-theme UI** — Tailwind 4 + daisyUI with a theme switcher.
 
 ## Architecture
@@ -62,7 +62,8 @@ deployment, backed by the Redline tenant-management API.
 
 - The authenticated **shell** owns the router-outlet and renders navigation from
   `AppConfig.menuItems`, filtered by the current role.
-- **Participants** talk to EDC connectors (`edc-connector-config.json`).
+- **Participants** load their EDC connector config from Keycloak token claim
+  `edc_connector_config`.
 - **Operators** see the Redline backend surfaced as a single connector with a
   custom health check; tenant operations go through `RedlineService`.
 
@@ -99,7 +100,6 @@ can be replaced per environment without rebuilding:
 | File | Purpose |
 | --- | --- |
 | `app-config.json` | Menu items, health-check interval, view descriptions |
-| `edc-connector-config.json` | EDC connectors participants connect to |
 | `redline-config.json` | Redline backend base URL + DID prefix (operator) |
 | `auth-config.json` | Keycloak issuer/client and OIDC redirect settings |
 
@@ -109,10 +109,15 @@ defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
 
-After deploying JAD or after deploying new participants or the tokens expired (1h TTL), run the script to update the EDC connector config:
+After deploying JAD, after deploying new participants, or when connector tokens
+expire (1h TTL), run the sync script. It updates/creates Keycloak participant
+users and refreshes the `edc_connector_config` claim:
 ```sh
 ./create-edc-connector-config.sh
 ```
+
+The script uses `connectorName` (from participant DID) as both username and
+password for each participant user in dev.
 
 ## Authentication & roles
 
@@ -130,6 +135,7 @@ Both can access Home. Access is defined once in
 Role-specific token claim requirements:
 
 - **participant** must have `participant_context_id` claim.
+- **participant** must have `edc_connector_config` claim.
 - **operator** must have `operator_id` claim.
 
 Missing required claims reject login during callback processing.
@@ -174,7 +180,7 @@ The realm import config creates:
 - realm `jad-dev`
 - roles `operator` and `participant`
 - client `jad-ui` (public, code flow, PKCE)
-- protocol mappers for `participant_context_id` and `operator_id`
+- protocol mappers for `participant_context_id`, `edc_connector_config`, and `operator_id`
 - demo users `operator` and `participant` with role-specific attributes
 
 _Note_: As long as there is no identity provider, the `operator` role can access all service providers and the `participant` role has access to all participants.

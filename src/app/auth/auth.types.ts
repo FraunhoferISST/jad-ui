@@ -1,4 +1,5 @@
 import { InjectionToken } from '@angular/core';
+import { EdcConfig } from '@eclipse-edc/dashboard-core';
 
 /**
  * The roles supported by the application.
@@ -26,6 +27,35 @@ export function isRole(value: unknown): value is Role {
   return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
 }
 
+export function isEdcConnectorConfig(value: unknown): value is EdcConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const config = value as Record<string, unknown>;
+  const hasCoreFields =
+    typeof config['connectorName'] === 'string' &&
+    typeof config['managementUrl'] === 'string' &&
+    typeof config['managementApiVersion'] === 'string' &&
+    typeof config['defaultUrl'] === 'string' &&
+    typeof config['protocolUrl'] === 'string';
+
+  if (!hasCoreFields) {
+    return false;
+  }
+
+  if (config['authorization'] == null) {
+    return true;
+  }
+
+  if (typeof config['authorization'] !== 'object') {
+    return false;
+  }
+
+  const authorization = config['authorization'] as Record<string, unknown>;
+  return typeof authorization['key'] === 'string' && typeof authorization['value'] === 'string';
+}
+
 /**
  * The authenticated user as exposed to the rest of the application.
  */
@@ -34,6 +64,7 @@ export interface AuthUser {
   role: Role;
   displayName?: string;
   participantContextId?: string;
+  participantEdcConfig?: EdcConfig;
   operatorId?: string;
 }
 

@@ -1,6 +1,14 @@
 import { inject, Injectable } from '@angular/core';
 import { AuthConfig, OAuthService } from 'angular-oauth2-oidc';
-import { AuthProvider, AuthSession, AuthUser, isRole, Role } from '../auth.types';
+import {
+  AuthProvider,
+  AuthSession,
+  AuthUser,
+  isEdcConnectorConfig,
+  isRole,
+  Role,
+} from '../auth.types';
+import { EdcConfig } from '@eclipse-edc/dashboard-core';
 import { KEYCLOAK_AUTH_CONFIG } from '../keycloak-auth.config';
 
 interface TokenClaims {
@@ -10,6 +18,7 @@ interface TokenClaims {
     roles?: unknown;
   };
   participant_context_id?: string;
+  edc_connector_config?: string;
   operator_id?: string;
 }
 
@@ -117,7 +126,14 @@ export class KeycloakAuthProvider implements AuthProvider {
       if (!participantContextId) {
         throw new Error('Missing required token claim: participant_context_id');
       }
+
+      const participantEdcConfig = this.readParticipantEdcConfig(claims);
+      if (!participantEdcConfig) {
+        throw new Error('Missing or invalid required token claim: edc_connector_config');
+      }
+
       user.participantContextId = participantContextId;
+      user.participantEdcConfig = participantEdcConfig;
     }
 
     if (role === 'operator') {
@@ -153,6 +169,20 @@ export class KeycloakAuthProvider implements AuthProvider {
     }
 
     return applicationRoles[0];
+  }
+
+  private readParticipantEdcConfig(claims: TokenClaims): EdcConfig | null {
+    const raw = claims.edc_connector_config?.trim();
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return isEdcConnectorConfig(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   private parseTokenClaims(token: string): TokenClaims | null {

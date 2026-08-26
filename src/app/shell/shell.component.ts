@@ -83,7 +83,7 @@ export class ShellComponent implements OnInit {
     const configs$: Promise<EdcConfig[]> =
       this.auth.role() === 'operator'
         ? Promise.resolve([this.toEdcConfig(this.redlineConfig.baseUrl)])
-        : firstValueFrom(this.http.get<EdcConfig[]>('config/edc-connector-config.json'));
+        : this.resolveParticipantConfigs();
 
     // Assigned synchronously so the library's `ngAfterViewInit` can await it.
     this.edcConfigs = configs$.then(configs => {
@@ -99,6 +99,17 @@ export class ShellComponent implements OnInit {
     this.appConfig = firstValueFrom(this.http.get<AppConfig>('config/app-config.json')).then(
       config => this.applyRoleMenu(config),
     );
+  }
+
+  private async resolveParticipantConfigs(): Promise<EdcConfig[]> {
+    const user = this.auth.user();
+    const config = user?.participantEdcConfig;
+
+    if (!config) {
+      throw new Error('Missing participant EDC connector configuration in authentication claims.');
+    }
+
+    return [config];
   }
 
   /**
