@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-import
+data:
+  realm-jad-dev.json: |
+    {
+      "realm": "jad-dev",
+      "enabled": true,
+      "displayName": "JAD Dev Realm",
+      "sslRequired": "none",
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "roles": {
+        "realm": [
+          {
+            "name": "operator"
+          },
+          {
+            "name": "participant"
+          }
+        ]
+      },
+      "clients": [
+        {
+          "clientId": "jad-ui",
+          "name": "JAD UI",
+          "enabled": true,
+          "publicClient": true,
+          "protocol": "openid-connect",
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "frontchannelLogout": true,
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "redirectUris": [
+            "http://localhost:4200/login",
+            "http://localhost:4200/*",
+            "http://jad.localhost/*"
+          ],
+          "webOrigins": [
+            "http://localhost:4200",
+            "http://jad.localhost"
+          ],
+          "defaultClientScopes": [
+            "profile",
+            "email",
+            "roles"
+          ],
+          "optionalClientScopes": [
+            "address",
+            "phone",
+            "offline_access",
+            "microprofile-jwt"
+          ],
+          "protocolMappers": [
+            {
+              "name": "participant-context-id",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "participant_context_id",
+                "claim.name": "participant_context_id",
+                "jsonType.label": "String",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "operator-id",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "operator_id",
+                "claim.name": "operator_id",
+                "jsonType.label": "String",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "users": [
+        {
+          "username": "operator",
+          "enabled": true,
+          "emailVerified": true,
+          "firstName": "JAD",
+          "lastName": "Operator",
+          "email": "operator@jad.local",
+          "attributes": {
+            "operator_id": [
+              "operator-dev-01"
+            ]
+          },
+          "credentials": [
+            {
+              "type": "password",
+              "value": "operator",
+              "temporary": false
+            }
+          ],
+          "realmRoles": [
+            "operator"
+          ]
+        },
+        {
+          "username": "participant",
+          "enabled": true,
+          "emailVerified": true,
+          "firstName": "JAD",
+          "lastName": "Participant",
+          "email": "participant@jad.local",
+          "attributes": {
+            "participant_context_id": [
+              "participant-context-dev-01"
+            ]
+          },
+          "credentials": [
+            {
+              "type": "password",
+              "value": "participant",
+              "temporary": false
+            }
+          ],
+          "realmRoles": [
+            "participant"
+          ]
+        }
+      ]
+    }
