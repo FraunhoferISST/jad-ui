@@ -1,0 +1,9 @@
+{
+  "issuer": "http://keycloak.jad.localhost/realms/jad-dev",
+  "clientId": "jad-ui",
+  "scope": "openid profile email roles",
+  "redirectUri": "http://localhost:4200/login",
+  "postLogoutRedirectUri": "http://localhost:4200/login",
+  "strictDiscoveryDocumentValidation": false,
+  "requireHttps": false
+}

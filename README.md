@@ -31,9 +31,9 @@ deployment, backed by the Redline tenant-management API.
   Redline backend.
 - **Role-based access** — A single source of truth (`ACCESS_RULES`) drives both
   route guards and menu filtering, so navigation and authorization never drift.
-- **Swappable auth** — Authentication is hidden behind an `AuthProvider`
-  interface. The default credentials provider can be replaced with OAuth/OIDC in
-  a single binding change.
+- **Keycloak SSO auth** — Authentication is implemented via OAuth 2.0 / OIDC
+  (Authorization Code + PKCE) against Keycloak and still abstracted behind an
+  `AuthProvider` interface.
 - **Runtime config** — Connectors, menu, and backend URLs are loaded from JSON
   at startup, so the same build can target different environments.
 - **Multi-theme UI** — Tailwind 4 + daisyUI with a theme switcher.
@@ -88,8 +88,8 @@ npm install
 npm start
 ```
 
-Open http://localhost:4200/. You'll land on `/login` — sign in with the demo
-credentials below.
+Open http://localhost:4200/. You'll land on `/login` and start SSO login via
+Keycloak.
 
 ## Configuration
 
@@ -101,6 +101,7 @@ can be replaced per environment without rebuilding:
 | `app-config.json` | Menu items, health-check interval, view descriptions |
 | `edc-connector-config.json` | EDC connectors participants connect to |
 | `redline-config.json` | Redline backend base URL + DID prefix (operator) |
+| `auth-config.json` | Keycloak issuer/client and OIDC redirect settings |
 
 If `redline-config.json` is missing or invalid, JAD UI falls back to built-in
 defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
@@ -115,15 +116,10 @@ After deploying JAD or after deploying new participants or the tokens expired (1
 
 ## Authentication & roles
 
-Auth is abstracted behind `AuthProvider`. The shipped `CredentialsAuthProvider`
-validates against an in-memory user list — no backend required.
+Auth is abstracted behind `AuthProvider`. The shipped
+`KeycloakAuthProvider` uses OAuth 2.0 / OpenID Connect with Keycloak.
 
-| Username | Password | Role |
-| --- | --- | --- |
-| `operator` | `operator` | operator |
-| `participant` | `participant` | participant |
-
-Two roles are supported:
+Two realm roles are supported:
 
 - **participant** — EDC views (catalog, assets, policies, contracts, transfers).
 - **operator** — operator console (tenants, open registrations).
@@ -131,8 +127,55 @@ Two roles are supported:
 Both can access Home. Access is defined once in
 `src/app/auth/access-rules.ts` and enforced by `roleGuard` and the menu filter.
 
-**Switching to OAuth/OIDC:** implement `AuthProvider` and change the binding in
-`src/app/auth/auth.config.ts` (`provideAuth()`). No other code needs to change.
+Role-specific token claim requirements:
+
+- **participant** must have `participant_context_id` claim.
+- **operator** must have `operator_id` claim.
+
+Missing required claims reject login during callback processing.
+
+### Dev Keycloak on Kubernetes
+
+Kubernetes manifests for local development are under `ops/keycloak/`.
+
+1) Add local host mapping:
+
+```text
+127.0.0.1 keycloak.jad.localhost
+```
+
+2) Deploy Keycloak:
+
+```bash
+kubectl apply -k ops/keycloak/base
+kubectl apply -k ops/keycloak/overlays/gateway
+```
+
+3) Verify:
+
+```bash
+kubectl -n jad-auth get pods
+kubectl -n jad-auth get gateways.gateway.networking.k8s.io
+kubectl -n jad-auth get httproutes.gateway.networking.k8s.io
+```
+
+If your cluster does not have Gateway API support, use the ingress overlay:
+
+```bash
+kubectl apply -k ops/keycloak/overlays/ingress
+kubectl -n jad-auth get ingress
+```
+
+Keycloak will be available at `http://keycloak.jad.localhost` and the imported
+realm issuer at `http://keycloak.jad.localhost/realms/jad-dev`.
+
+The realm import config creates:
+
+- realm `jad-dev`
+- roles `operator` and `participant`
+- client `jad-ui` (public, code flow, PKCE)
+- protocol mappers for `participant_context_id` and `operator_id`
+- demo users `operator` and `participant` with role-specific attributes
 
 _Note_: As long as there is no identity provider, the `operator` role can access all service providers and the `participant` role has access to all participants.
 
@@ -143,7 +186,7 @@ src/
 ├── app/
 │   ├── app.config.ts        # bootstrap providers (router, http, auth, redline)
 │   ├── app.routes.ts        # top-level + lazy-loaded shell child routes
-│   ├── auth/                # AuthService, providers, guards, access rules
+│   ├── auth/                # AuthService, Keycloak provider, guards, access rules
 │   ├── login/               # login view
 │   ├── registration/        # public tenant-registration form
 │   └── shell/               # dashboard shell wrapper + user menu
@@ -155,4 +198,3 @@ src/
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config
 ```
-

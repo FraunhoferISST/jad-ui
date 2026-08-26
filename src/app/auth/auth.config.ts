@@ -1,17 +1,19 @@
-import { Provider } from '@angular/core';
+import { EnvironmentProviders, inject, provideAppInitializer, Provider } from '@angular/core';
+import { provideOAuthClient } from 'angular-oauth2-oidc';
 import { AUTH_PROVIDER } from './auth.types';
-import { CredentialsAuthProvider } from './providers/credentials-auth.provider';
+import { AuthService } from './auth.service';
+import { provideKeycloakAuthConfig } from './keycloak-auth.config';
+import { KeycloakAuthProvider } from './providers/keycloak-auth.provider';
 
 /**
- * Wires up the authentication providers for the application.
- *
- * To switch from the iteration-1 username/password flow to OAuth/OIDC, change
- * the single `useClass` binding below to your `OAuthAuthProvider` (which must
- * implement {@link AuthProvider}). No other application code needs to change.
+ * Wires up Keycloak OAuth/OIDC authentication for the application.
  */
-export function provideAuth(): Provider[] {
+export function provideAuth(): (Provider | EnvironmentProviders)[] {
   return [
-    CredentialsAuthProvider,
-    { provide: AUTH_PROVIDER, useExisting: CredentialsAuthProvider },
+    provideOAuthClient(),
+    ...provideKeycloakAuthConfig(),
+    KeycloakAuthProvider,
+    { provide: AUTH_PROVIDER, useExisting: KeycloakAuthProvider },
+    provideAppInitializer(() => inject(AuthService).initialize()),
   ];
 }

@@ -27,22 +27,14 @@ export function isRole(value: unknown): value is Role {
 }
 
 /**
- * Credentials passed to an {@link AuthProvider} when logging in with the
- * username/password flow. OAuth-based providers may ignore these (they perform
- * a redirect/popup flow instead).
- */
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-/**
  * The authenticated user as exposed to the rest of the application.
  */
 export interface AuthUser {
   username: string;
   role: Role;
   displayName?: string;
+  participantContextId?: string;
+  operatorId?: string;
 }
 
 /**
@@ -61,10 +53,9 @@ export interface AuthSession {
  * Strategy abstraction for authentication.
  *
  * This is the single seam that makes the auth system swappable. The current
- * iteration ships a {@link CredentialsAuthProvider} (in-memory username /
- * password). To move to OAuth later, implement this interface with an
- * OAuth/OIDC client and swap the binding in `provideAuth()` — nothing else in
- * the app needs to change.
+ * iteration ships a Keycloak OAuth/OIDC implementation. To switch providers,
+ * keep this interface and swap the binding in `provideAuth()` — nothing else
+ * in the app needs to change.
  *
  * Redirect-based flows (OAuth authorization code) can use the optional
  * {@link AuthProvider.handleRedirectCallback} hook, which the app can call on
@@ -72,10 +63,13 @@ export interface AuthSession {
  */
 export interface AuthProvider {
   /**
-   * Authenticate a user and resolve to a session. Implementations must reject
-   * (throw) with a meaningful error message on failure.
+   * Start authentication.
+   *
+   * Redirect-based providers begin the OAuth/OIDC flow and do not resolve with
+   * a session directly; the resulting session is completed via
+   * {@link AuthProvider.handleRedirectCallback}.
    */
-  login(credentials: LoginCredentials): Promise<AuthSession>;
+  login(returnUrl?: string): Promise<void>;
 
   /** Tear down any provider-side session state. */
   logout(): Promise<void>;
@@ -92,6 +86,12 @@ export interface AuthProvider {
    * redirect callback.
    */
   handleRedirectCallback?(): Promise<AuthSession | null>;
+
+  /**
+   * Optional: return and clear the post-login redirect URL captured from the
+   * provider's login state.
+   */
+  consumePostLoginRedirectUrl?(): string | null;
 }
 
 /**

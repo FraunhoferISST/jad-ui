@@ -1,35 +1,53 @@
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from './auth.service';
-import {
-  AUTH_PROVIDER,
-  AuthProvider,
-  AuthSession,
-  LoginCredentials,
-} from './auth.types';
+import { AUTH_PROVIDER, AuthProvider, AuthSession } from './auth.types';
 
 const STORAGE_KEY = 'edc-dashboard.auth.session';
 
+function participantSession(overrides: Partial<AuthSession> = {}): AuthSession {
+  return {
+    user: {
+      username: 'participant',
+      role: 'participant',
+      displayName: 'Participant',
+      participantContextId: 'pcx-123',
+    },
+    token: 'stub-token',
+    ...overrides,
+  };
+}
+
 function operatorSession(overrides: Partial<AuthSession> = {}): AuthSession {
   return {
-    user: { username: 'operator', role: 'operator', displayName: 'Operator' },
+    user: {
+      username: 'operator',
+      role: 'operator',
+      displayName: 'Operator',
+      operatorId: 'opr-001',
+    },
     token: 'stub-token',
     ...overrides,
   };
 }
 
 class FakeAuthProvider implements AuthProvider {
-  loginResult: AuthSession = operatorSession();
+  restoreResult: AuthSession | null = null;
+  callbackResult: AuthSession | null = null;
+  restoreError: Error | null = null;
+  callbackError: Error | null = null;
   loginError: Error | null = null;
   logoutError: Error | null = null;
-  loginCalls: LoginCredentials[] = [];
+  loginCalls: Array<string | undefined> = [];
   logoutCalls = 0;
+  restoreCalls = 0;
+  callbackCalls = 0;
+  postLoginReturnUrl: string | null = null;
 
-  async login(credentials: LoginCredentials): Promise<AuthSession> {
-    this.loginCalls.push(credentials);
+  async login(returnUrl?: string): Promise<void> {
+    this.loginCalls.push(returnUrl);
     if (this.loginError) {
       throw this.loginError;
     }
-    return this.loginResult;
   }
 
   async logout(): Promise<void> {
@@ -38,6 +56,28 @@ class FakeAuthProvider implements AuthProvider {
       throw this.logoutError;
     }
   }
+
+  async restoreSession(): Promise<AuthSession | null> {
+    this.restoreCalls++;
+    if (this.restoreError) {
+      throw this.restoreError;
+    }
+    return this.restoreResult;
+  }
+
+  async handleRedirectCallback(): Promise<AuthSession | null> {
+    this.callbackCalls++;
+    if (this.callbackError) {
+      throw this.callbackError;
+    }
+    return this.callbackResult;
+  }
+
+  consumePostLoginRedirectUrl(): string | null {
+    const url = this.postLoginReturnUrl;
+    this.postLoginReturnUrl = null;
+    return url;
+  }
 }
 
 describe('AuthService', () => {
@@ -45,10 +85,7 @@ describe('AuthService', () => {
 
   function createService(): AuthService {
     TestBed.configureTestingModule({
-      providers: [
-        AuthService,
-        { provide: AUTH_PROVIDER, useValue: provider },
-      ],
+      providers: [AuthService, { provide: AUTH_PROVIDER, useValue: provider }],
     });
     return TestBed.inject(AuthService);
   }
@@ -63,55 +100,86 @@ describe('AuthService', () => {
     TestBed.resetTestingModule();
   });
 
-  describe('login', () => {
-    it('delegates to the provider, sets signals and persists the session', async () => {
+  describe('initialize', () => {
+    it('restores session from redirect callback when present', async () => {
+      provider.callbackResult = participantSession();
       const service = createService();
 
-      const session = await service.login({ username: 'operator', password: 'operator' });
+      await service.initialize();
 
-      expect(provider.loginCalls).toEqual([{ username: 'operator', password: 'operator' }]);
-      expect(session).toBe(provider.loginResult);
+      expect(provider.callbackCalls).toBe(1);
+      expect(provider.restoreCalls).toBe(0);
       expect(service.isAuthenticated()).toBe(true);
-      expect(service.user()?.username).toBe('operator');
-      expect(service.role()).toBe('operator');
-      expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(provider.loginResult));
+      expect(service.user()?.username).toBe('participant');
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(provider.callbackResult));
     });
 
-    it('propagates provider errors and leaves the session unauthenticated', async () => {
-      provider.loginError = new Error('Invalid username or password.');
+    it('falls back to provider restore when callback has no session', async () => {
+      provider.restoreResult = participantSession();
       const service = createService();
 
-      await expectAsync(
-        service.login({ username: 'bad', password: 'bad' }),
-      ).toBeRejectedWithError('Invalid username or password.');
+      await service.initialize();
+
+      expect(provider.callbackCalls).toBe(1);
+      expect(provider.restoreCalls).toBe(1);
+      expect(service.isAuthenticated()).toBe(true);
+    });
+
+    it('captures initialization errors and keeps user unauthenticated', async () => {
+      provider.callbackError = new Error('oidc callback failed');
+      const service = createService();
+
+      await service.initialize();
 
       expect(service.isAuthenticated()).toBe(false);
-      expect(service.role()).toBeNull();
-      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+      expect(service.consumeInitializationError()).toBe('oidc callback failed');
+      expect(service.consumeInitializationError()).toBeNull();
+    });
+  });
+
+  describe('login', () => {
+    it('delegates to provider with returnUrl and clears stale init errors', async () => {
+      provider.callbackError = new Error('stale error');
+      const service = createService();
+      await service.initialize();
+      expect(service.consumeInitializationError()).toBe('stale error');
+
+      await service.login('/catalog');
+
+      expect(provider.loginCalls).toEqual(['/catalog']);
+      expect(service.consumeInitializationError()).toBeNull();
+    });
+
+    it('propagates login errors', async () => {
+      provider.loginError = new Error('redirect start failed');
+      const service = createService();
+
+      await expectAsync(service.login('/home')).toBeRejectedWithError('redirect start failed');
+      expect(service.isAuthenticated()).toBe(false);
     });
   });
 
   describe('logout', () => {
-    it('clears the session and storage', async () => {
+    it('clears session and storage', async () => {
+      provider.restoreResult = participantSession();
       const service = createService();
-      await service.login({ username: 'operator', password: 'operator' });
+      await service.initialize();
 
       await service.logout();
 
       expect(provider.logoutCalls).toBe(1);
       expect(service.isAuthenticated()).toBe(false);
-      expect(service.role()).toBeNull();
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
-    it('still clears the local session when the provider logout rejects', async () => {
+    it('still clears local session when provider logout rejects', async () => {
+      provider.restoreResult = participantSession();
       provider.logoutError = new Error('network down');
       const service = createService();
-      await service.login({ username: 'operator', password: 'operator' });
+      await service.initialize();
 
       await expectAsync(service.logout()).toBeRejectedWithError('network down');
 
-      // The `finally` block must clear local state regardless of provider failure.
       expect(service.isAuthenticated()).toBe(false);
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
@@ -119,55 +187,57 @@ describe('AuthService', () => {
 
   describe('session restore from storage', () => {
     it('restores a valid stored session on construction', () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(operatorSession()));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(participantSession()));
 
       const service = createService();
 
       expect(service.isAuthenticated()).toBe(true);
-      expect(service.role()).toBe('operator');
+      expect(service.role()).toBe('participant');
     });
 
-    it('does not restore when there is no stored session', () => {
+    it('ignores a session with an invalid role', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ user: { username: 'x', role: 'admin', displayName: 'X' } }),
+      );
+
       const service = createService();
 
       expect(service.isAuthenticated()).toBe(false);
       expect(service.role()).toBeNull();
     });
 
-    it('ignores a session with an invalid (unknown) role', () => {
-      const tampered = {
-        user: { username: 'x', role: 'admin', displayName: 'X' },
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tampered));
+    it('ignores participant session without participantContextId', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ user: { username: 'participant', role: 'participant' }, token: 'x' }),
+      );
 
       const service = createService();
 
-      // Restoring this would otherwise cause an infinite redirect loop in the
-      // role guard, since the role is in no route allow-list.
       expect(service.isAuthenticated()).toBe(false);
-      expect(service.role()).toBeNull();
+    });
+
+    it('ignores operator session without operatorId', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ user: { username: 'operator', role: 'operator' }, token: 'x' }),
+      );
+
+      const service = createService();
+
+      expect(service.isAuthenticated()).toBe(false);
     });
 
     it('ignores an expired session', () => {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify(operatorSession({ expiresAt: Date.now() - 1000 })),
+        JSON.stringify(participantSession({ expiresAt: Date.now() - 1000 })),
       );
 
       const service = createService();
 
       expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('restores a session whose expiry is in the future', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(operatorSession({ expiresAt: Date.now() + 60_000 })),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(true);
     });
 
     it('ignores malformed JSON in storage', () => {
@@ -176,6 +246,26 @@ describe('AuthService', () => {
       const service = createService();
 
       expect(service.isAuthenticated()).toBe(false);
+    });
+
+    it('restores a valid operator session on construction', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(operatorSession()));
+
+      const service = createService();
+
+      expect(service.isAuthenticated()).toBe(true);
+      expect(service.role()).toBe('operator');
+      expect(service.user()?.operatorId).toBe('opr-001');
+    });
+  });
+
+  describe('post-login redirect URL', () => {
+    it('consumes the redirect URL exactly once', () => {
+      provider.postLoginReturnUrl = '/transfer-history';
+      const service = createService();
+
+      expect(service.consumePostLoginRedirectUrl()).toBe('/transfer-history');
+      expect(service.consumePostLoginRedirectUrl()).toBeNull();
     });
   });
 });
