@@ -3,11 +3,17 @@
 set -euo pipefail
 
 JAD_BASE_URL=${JAD_BASE_URL:-http://jad.localhost}
+EDC_PROXY_BASE_URL=${EDC_PROXY_BASE_URL:-http://edc-proxy.localhost/proxy}
 JWTLET_NAMESPACE=${JWTLET_NAMESPACE:-edc-v}
 JWTLET_SERVICE=${JWTLET_SERVICE:-jwtlet}
 JWTLET_LOCAL_PORT=${JWTLET_LOCAL_PORT:-8081}
 JWTLET_REMOTE_PORT=${JWTLET_REMOTE_PORT:-8081}
 JWTLET_SA=${JWTLET_SA:-cfm-agents}
+EDC_PROXY_SA=${EDC_PROXY_SA:-edc-administration-api-client}
+JWTLET_SOURCE_CLIENT_IDENTIFIER=${JWTLET_SOURCE_CLIENT_IDENTIFIER:-system:serviceaccount:${JWTLET_NAMESPACE}:controlplane}
+JWTLET_TARGET_CLIENT_IDENTIFIER=${JWTLET_TARGET_CLIENT_IDENTIFIER:-system:serviceaccount:${JWTLET_NAMESPACE}:${EDC_PROXY_SA}}
+JWTLET_DEFAULT_SCOPES_JSON=${JWTLET_DEFAULT_SCOPES_JSON:-'["write","read"]'}
+JWTLET_DEFAULT_AUDIENCES_JSON=${JWTLET_DEFAULT_AUDIENCES_JSON:-'["edcv"]'}
 
 KEYCLOAK_BASE_URL=${KEYCLOAK_BASE_URL:-http://keycloak.jad.localhost}
 KEYCLOAK_REALM=${KEYCLOAK_REALM:-jad-dev}
@@ -38,6 +44,16 @@ require_cmd() {
 require_cmd kubectl
 require_cmd curl
 require_cmd jq
+
+if ! jq -e 'type == "array"' <<<"${JWTLET_DEFAULT_SCOPES_JSON}" >/dev/null; then
+  echo "JWTLET_DEFAULT_SCOPES_JSON must be a JSON array." >&2
+  exit 1
+fi
+
+if ! jq -e 'type == "array"' <<<"${JWTLET_DEFAULT_AUDIENCES_JSON}" >/dev/null; then
+  echo "JWTLET_DEFAULT_AUDIENCES_JSON must be a JSON array." >&2
+  exit 1
+fi
 
 echo "Creating service-account token for jwtlet lookup..."
 ST=$(kubectl create token "${JWTLET_SA}" -n "${JWTLET_NAMESPACE}" --audience="https://kubernetes.default.svc.cluster.local")
@@ -78,16 +94,57 @@ fi
 
 echo "Syncing participant users into Keycloak realm '${KEYCLOAK_REALM}'..."
 
-kubectl_mappings_url="http://localhost:${JWTLET_LOCAL_PORT}/api/v1/mappings"
+jwtlet_mappings_url="http://localhost:${JWTLET_LOCAL_PORT}/api/v1/mappings"
 
-curl -sS -L "${kubectl_mappings_url}" -H "Authorization: Bearer ${ST}" \
-  | jq -c '.[] | select(.clientIdentifier == "system:serviceaccount:edc-v:controlplane")' \
+curl -sS -L "${jwtlet_mappings_url}" -H "Authorization: Bearer ${ST}" \
+  | jq -c --arg source_client_identifier "${JWTLET_SOURCE_CLIENT_IDENTIFIER}" '.[] | select(.clientIdentifier == $source_client_identifier)' \
   | while IFS= read -r obj; do
 
   participant_id=$(echo "${obj}" | jq -r '.participantContext')
   if [[ -z "${participant_id}" || "${participant_id}" == "null" ]]; then
     echo "Skipping mapping with empty participant context." >&2
     continue
+  fi
+
+  mapping_audiences=$(echo "${obj}" | jq -c \
+    --argjson fallback_audiences "${JWTLET_DEFAULT_AUDIENCES_JSON}" \
+    '(.audiences // $fallback_audiences) | if type == "array" then . else $fallback_audiences end')
+
+  mapping_payload=$(jq -n \
+    --arg client_identifier "${JWTLET_TARGET_CLIENT_IDENTIFIER}" \
+    --arg participant_context "${participant_id}" \
+    --argjson scopes "${JWTLET_DEFAULT_SCOPES_JSON}" \
+    --argjson audiences "${mapping_audiences}" \
+    '{
+      clientIdentifier: $client_identifier,
+      participantContext: $participant_context,
+      scopes: $scopes,
+      audiences: $audiences
+    }')
+
+  encoded_client_identifier=$(jq -rn --arg value "${JWTLET_TARGET_CLIENT_IDENTIFIER}" '$value | @uri')
+  encoded_participant_context=$(jq -rn --arg value "${participant_id}" '$value | @uri')
+
+  create_mapping_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+    -X POST "${jwtlet_mappings_url}" \
+    -H "Authorization: Bearer ${ST}" \
+    -H 'Content-Type: application/json' \
+    --data "${mapping_payload}")
+
+  if [[ "${create_mapping_status}" == "200" || "${create_mapping_status}" == "201" ]]; then
+    echo "Created jwtlet mapping for '${JWTLET_TARGET_CLIENT_IDENTIFIER}' (${participant_id})."
+  else
+    jwtlet_update_mapping_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+      -X PUT "${jwtlet_mappings_url}/${encoded_client_identifier}/${encoded_participant_context}" \
+      -H "Authorization: Bearer ${ST}" \
+      -H 'Content-Type: application/json' \
+      --data "${mapping_payload}")
+
+    if [[ "${jwtlet_update_mapping_status}" == "200" || "${jwtlet_update_mapping_status}" == "204" ]]; then
+      echo "Updated jwtlet mapping for '${JWTLET_TARGET_CLIENT_IDENTIFIER}' (${participant_id})."
+    else
+      echo "Warning: failed to upsert jwtlet mapping for '${JWTLET_TARGET_CLIENT_IDENTIFIER}' (${participant_id}). create=${create_mapping_status}, update=${jwtlet_update_mapping_status}." >&2
+    fi
   fi
 
   token=$(curl -sS -X POST \
@@ -122,8 +179,8 @@ curl -sS -L "${kubectl_mappings_url}" -H "Authorization: Bearer ${ST}" \
 
   connector_config=$(jq -c -n \
     --arg name "${connector_name}" \
-    --arg mgmt "${JAD_BASE_URL}/api/management" \
-    --arg mgmt_version "v5beta/participants/${participant_id}" \
+    --arg mgmt "${EDC_PROXY_BASE_URL}/controlplane" \
+    --arg mgmt_version "v5/participants/${participant_id}" \
     --arg default "${JAD_BASE_URL}/api/management/health" \
     --arg bearer "Bearer ${token}" \
     --arg did "${did}" \
