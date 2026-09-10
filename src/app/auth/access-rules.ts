@@ -15,6 +15,8 @@ export const ACCESS_RULES: Record<string, Role[]> = {
   home: ['operator', 'participant'],
   catalog: ['participant'],
   assets: ['participant'],
+  files: ['participant'],
+  explore: ['participant'],
   policies: ['participant'],
   'contract-definitions': ['participant'],
   contracts: ['participant'],

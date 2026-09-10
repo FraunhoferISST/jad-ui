@@ -21,6 +21,18 @@
       "viewDescription": "The asset view allows you to create, edit and delete the assets (datasets) in your connector. An asset represents any data that can be shared, for example static files, streaming data or API access. The dashboard only allows you to create assets with data types that your data plane(s) support."
     },
     {
+      "text": "Files",
+      "materialSymbol": "upload_file",
+      "routerPath": "files",
+      "viewDescription": "The files view lets participants upload and manage their files, review sharing state, inspect agreement history, and download contracted remote data."
+    },
+    {
+      "text": "Explore",
+      "materialSymbol": "travel_explore",
+      "routerPath": "explore",
+      "viewDescription": "The explore view lets participants discover remote files from connected partners, request access contracts, and trigger data transfers for downloads once access is granted."
+    },
+    {
       "text": "Policy Definitions",
       "materialSymbol": "policy",
       "routerPath": "policies",

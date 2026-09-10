@@ -68,6 +68,18 @@ export const routes: Routes = [
           import('@eclipse-edc/dashboard-core/catalog').then(m => m.CatalogViewComponent),
       },
       {
+        path: 'files',
+        loadChildren: () =>
+          import('../participant-view/files/files.routes').then(m => m.FILES_ROUTES),
+      },
+      {
+        path: 'explore',
+        loadChildren: () =>
+          import('../participant-view/explore/explore.routes').then(
+            m => m.EXPLORE_ROUTES,
+          ),
+      },
+      {
         path: 'transfer-history',
         loadComponent: () =>
           import('@eclipse-edc/dashboard-core/transfer').then(m => m.TransferHistoryViewComponent),

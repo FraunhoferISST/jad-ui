@@ -1,0 +1,138 @@
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold">Explore</h1>
+    <p class="text-sm text-base-content/70">Discover remote files from your dataspace network.</p>
+  </div>
+
+  <form class="grid gap-3 rounded-2xl border border-base-300 bg-base-200 p-4 md:grid-cols-3" [formGroup]="filterForm">
+    <label class="input w-full md:col-span-2">
+      <span class="material-symbols-rounded opacity-70">search</span>
+      <input type="text" formControlName="searchTerm" placeholder="Search by file name, company, use case, dataspace" />
+    </label>
+
+    <div class="grid grid-cols-2 gap-3">
+      <select class="select w-full" formControlName="useCaseFilter">
+        <option value="">All use cases</option>
+        @for (uc of useCases; track uc.id) {
+          <option [value]="uc.id">{{ uc.label }}</option>
+        }
+      </select>
+
+      <select class="select w-full" formControlName="companyFilter">
+        <option value="">All companies</option>
+        @for (partner of partners; track partner.identifier) {
+          <option [value]="partner.identifier">{{ partner.nickname || partner.identifier }}</option>
+        }
+      </select>
+    </div>
+  </form>
+
+  <div class="rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Use case</th>
+            <th>Company</th>
+            <th>Dataspace</th>
+            <th>Access</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (loading) {
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <span class="loading loading-spinner loading-lg"></span>
+              </td>
+            </tr>
+          } @else if (pagedFiles.length === 0) {
+            <tr>
+              <td colspan="7" class="py-12 text-center">
+                <div class="flex flex-col items-center gap-2 opacity-75">
+                  <span class="material-symbols-rounded text-3xl">travel_explore</span>
+                  <p class="font-medium">No remote files found</p>
+                  <p class="text-sm">Try adjusting your filters.</p>
+                </div>
+              </td>
+            </tr>
+          } @else {
+            @for (file of pagedFiles; track file.id) {
+              <tr>
+                <td>
+                  <div class="font-medium">{{ file.name || 'N/A' }}</div>
+                  @if (file.description) {
+                    <div class="text-xs text-base-content/70">{{ file.description }}</div>
+                  }
+                </td>
+                <td><span class="badge badge-soft">{{ file.type || 'N/A' }}</span></td>
+                <td>{{ file.useCaseLabel || file.useCase || 'N/A' }}</td>
+                <td>{{ file.partnerName || 'N/A' }}</td>
+                <td>{{ file.dataspace || 'N/A' }}</td>
+                <td>
+                  @if (hasAccess(file)) {
+                    <span class="badge badge-success badge-soft">Has access</span>
+                  } @else {
+                    <span class="badge badge-warning badge-soft">No access</span>
+                  }
+                </td>
+                <td>
+                  <div class="flex justify-end gap-2">
+                    @if (hasAccess(file)) {
+                      <button
+                        class="btn btn-sm"
+                        type="button"
+                        [disabled]="requestingTransferId === file.id"
+                        (click)="requestTransferAndDownload(file)">
+                        @if (requestingTransferId === file.id) {
+                          <span class="loading loading-spinner loading-xs"></span>
+                          Downloading
+                        } @else {
+                          <span class="material-symbols-rounded">download</span>
+                          Download
+                        }
+                      </button>
+                    } @else {
+                      <button
+                        class="btn btn-sm"
+                        type="button"
+                        [disabled]="requestingAccessId === file.id"
+                        (click)="requestAccess(file)">
+                        @if (requestingAccessId === file.id) {
+                          <span class="loading loading-spinner loading-xs"></span>
+                          Requesting
+                        } @else {
+                          <span class="material-symbols-rounded">lock_open_right</span>
+                          Request access
+                        }
+                      </button>
+                    }
+                    <button class="btn btn-sm btn-ghost" type="button" (click)="openDetails(file)">
+                      <span class="material-symbols-rounded">visibility</span>
+                      View
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  @if (!loading && filteredFiles.length > pageSize) {
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-base-content/70">
+        Showing {{ (currentPage - 1) * pageSize + 1 }}-{{ ((currentPage - 1) * pageSize) + pagedFiles.length }} of {{ filteredFiles.length }} files
+      </p>
+      <div class="join">
+        <button class="btn btn-sm join-item" type="button" [disabled]="currentPage === 1" (click)="previousPage()">Previous</button>
+        <button class="btn btn-sm join-item btn-active" type="button">Page {{ currentPage }} / {{ totalPages }}</button>
+        <button class="btn btn-sm join-item" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">Next</button>
+      </div>
+    </div>
+  }
+</div>

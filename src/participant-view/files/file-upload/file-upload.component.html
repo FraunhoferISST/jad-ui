@@ -1,0 +1,167 @@
+<div class="card rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+  <div class="card-body gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="card-title text-2xl">Upload files</h1>
+        <p class="text-sm text-base-content/70">Add metadata, partner access and publish new files.</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" (click)="closeUpload()">
+        <span class="material-symbols-rounded">close</span>
+        Close
+      </button>
+    </div>
+
+    <ul class="steps steps-vertical lg:steps-horizontal">
+      @for (step of uploadSteps; track step.number) {
+        <li class="step" [class.step-primary]="uploadStep >= step.number">{{ step.label }}</li>
+      }
+    </ul>
+
+    @if (loading) {
+      <div class="py-12 text-center">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+    } @else {
+      @if (uploadStep === 1) {
+        <fieldset class="fieldset rounded-2xl border border-base-300 bg-base-200 p-4">
+          <legend class="fieldset-legend">Select files</legend>
+          <input class="file-input w-full" type="file" multiple (change)="onFileSelected($event)" />
+          <p class="fieldset-label">Max size per file: {{ formatFileSize(maxFileSize) }}</p>
+
+          @if (selectedFiles.length > 0) {
+            <ul class="list rounded-box border border-base-300 bg-base-100">
+              @for (file of selectedFiles; track file.name) {
+                <li class="list-row">
+                  <span class="material-symbols-rounded opacity-70">description</span>
+                  <div class="list-col-grow">
+                    <div>{{ file.name }}</div>
+                    <div class="text-xs text-base-content/70">{{ file.type || 'unknown type' }}</div>
+                  </div>
+                  <span class="badge badge-ghost">{{ formatFileSize(file.size) }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </fieldset>
+      }
+
+      @if (uploadStep === 2) {
+        <fieldset class="fieldset rounded-2xl border border-base-300 bg-base-200 p-4" [formGroup]="form">
+          <legend class="fieldset-legend">File metadata</legend>
+          <label class="fieldset-label">Use case</label>
+          <select class="select w-full" formControlName="useCase">
+            <option value="" disabled>Select a use case</option>
+            @for (uc of useCases; track uc.id) {
+              <option [value]="uc.id">{{ uc.label }}</option>
+            }
+          </select>
+          @if (form.controls.useCase.invalid) {
+            <p class="text-sm text-error">Use case is required.</p>
+          }
+        </fieldset>
+      }
+
+      @if (uploadStep === 3) {
+        <fieldset class="fieldset rounded-2xl border border-base-300 bg-base-200 p-4" [formGroup]="form">
+          <legend class="fieldset-legend">Access restrictions</legend>
+
+          <div role="alert" class="alert alert-info alert-soft">
+            <span class="material-symbols-rounded">info</span>
+            <span>If no partner is selected, all ecosystem members can discover this file.</span>
+          </div>
+
+          <div class="relative mt-3">
+            <button #partnerTrigger type="button" class="btn w-full justify-between" (click)="togglePartnerDropdown()">
+              @if (getSelectedPartnerLabels().length > 0) {
+                <span class="truncate">{{ getSelectedPartnerLabels().join(', ') }}</span>
+              } @else {
+                <span class="text-base-content/60">Select partners (optional)</span>
+              }
+              <span class="material-symbols-rounded">expand_more</span>
+            </button>
+
+            @if (isPartnerDropdownOpen) {
+              <div #partnerDropdown class="absolute z-20 mt-2 w-full rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
+                <label class="input mb-2 w-full">
+                  <span class="material-symbols-rounded opacity-70">search</span>
+                  <input
+                    type="text"
+                    [value]="partnerSearch"
+                    (input)="updatePartnerSearch($any($event.target).value)"
+                    placeholder="Search partners" />
+                </label>
+
+                <div class="max-h-60 overflow-y-auto">
+                  @for (partner of getFilteredPartners(); track partner.identifier) {
+                    <button
+                      class="btn btn-ghost mb-1 w-full justify-start"
+                      type="button"
+                      (click)="togglePartnerSelection(partner.identifier)">
+                      <input class="checkbox checkbox-sm" type="checkbox" [checked]="isPartnerSelected(partner.identifier)" />
+                      <span class="truncate">{{ partner.nickname || partner.identifier }}</span>
+                    </button>
+                  }
+                  @if (getFilteredPartners().length === 0) {
+                    <p class="px-2 py-3 text-sm text-base-content/70">No partner matches your search.</p>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </fieldset>
+      }
+
+      @if (uploadStep === 4) {
+        <div class="rounded-2xl border border-base-300 bg-base-200 p-4">
+          <h2 class="mb-3 font-semibold">Review</h2>
+          <ul class="list rounded-box border border-base-300 bg-base-100">
+            @for (preview of filePreviewData; track preview.name) {
+              <li class="list-row">
+                <span class="material-symbols-rounded opacity-70">draft</span>
+                <div class="list-col-grow">
+                  <p class="font-medium">{{ preview.name }}</p>
+                  <p class="text-xs text-base-content/70">
+                    {{ preview.type }} - {{ formatFileSize(preview.size) }}
+                  </p>
+                  <p class="text-xs text-base-content/70">
+                    Use case: {{ preview.useCase || 'N/A' }}
+                  </p>
+                  @if (preview.partners?.length) {
+                    <p class="text-xs text-base-content/70">Partners: {{ preview.partners?.join(', ') }}</p>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    }
+
+    <div class="flex flex-wrap justify-between gap-3">
+      <button class="btn" type="button" [disabled]="uploadStep === 1 || loading" (click)="previousStep()">
+        Previous
+      </button>
+
+      <div class="flex gap-2">
+        <button class="btn" type="button" (click)="closeUpload()">
+          {{ uploadStep === 4 ? 'Close' : 'Cancel' }}
+        </button>
+
+        @if (uploadStep < 4) {
+          <button class="btn btn-primary" type="button" [disabled]="!canProceed() || loading" (click)="nextStep()">
+            Continue
+          </button>
+        } @else {
+          <button class="btn btn-primary" type="button" [disabled]="uploading || loading" (click)="upload()">
+            @if (uploading) {
+              <span class="loading loading-spinner loading-xs"></span>
+              Uploading
+            } @else {
+              Finish upload
+            }
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+</div>

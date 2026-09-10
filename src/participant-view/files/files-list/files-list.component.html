@@ -1,0 +1,144 @@
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold">Files</h1>
+      <p class="text-sm text-base-content/70">Manage your own files and contracted remote files.</p>
+    </div>
+    <div class="join">
+      <button class="btn join-item" type="button" (click)="openExplore()">
+        <span class="material-symbols-rounded">travel_explore</span>
+        Explore network
+      </button>
+      <button class="btn btn-primary join-item" type="button" (click)="openUpload()">
+        <span class="material-symbols-rounded">upload_file</span>
+        Add file
+      </button>
+    </div>
+  </div>
+
+  <form class="grid gap-3 rounded-2xl border border-base-300 bg-base-200 p-4 md:grid-cols-3" [formGroup]="filterForm">
+    <label class="input w-full md:col-span-2">
+      <span class="material-symbols-rounded opacity-70">search</span>
+      <input type="text" formControlName="searchTerm" placeholder="Search files, use cases, type or partner" />
+    </label>
+
+    <div class="grid grid-cols-2 gap-3">
+      <select class="select w-full" formControlName="useCaseFilter">
+        <option value="">All use cases</option>
+        @for (uc of useCases; track uc.id) {
+          <option [value]="uc.id">{{ uc.label }}</option>
+        }
+      </select>
+
+      <select class="select w-full" formControlName="originFilter">
+        <option value="">All origins</option>
+        <option value="owned">Owned</option>
+        <option value="remote">Remote</option>
+      </select>
+    </div>
+  </form>
+
+  <div class="rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Use case</th>
+            <th>Type</th>
+            <th>Size</th>
+            <th>Partner</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (loading) {
+            <tr>
+              <td colspan="8" class="py-12 text-center">
+                <span class="loading loading-spinner loading-lg"></span>
+              </td>
+            </tr>
+          } @else if (pagedFiles.length === 0) {
+            <tr>
+              <td colspan="8" class="py-12 text-center">
+                <div class="flex flex-col items-center gap-2 opacity-75">
+                  <span class="material-symbols-rounded text-3xl">folder_off</span>
+                  <p class="font-medium">No files match your filters</p>
+                  <p class="text-sm">Adjust the filters or upload a file.</p>
+                </div>
+              </td>
+            </tr>
+          } @else {
+            @for (file of pagedFiles; track file.id) {
+              <tr>
+                <td>
+                  <div class="font-medium">{{ file.name || 'N/A' }}</div>
+                </td>
+                <td>{{ file.useCaseLabel || file.useCase || 'N/A' }}</td>
+                <td>
+                  <span class="badge badge-soft">{{ file.type || 'N/A' }}</span>
+                </td>
+                <td>{{ formatFileSize(file.size) }}</td>
+                <td>
+                  @if (file.agreements && file.agreements.length > 0) {
+                    <div class="flex flex-wrap gap-1">
+                      @for (agreement of file.agreements; track agreement.id) {
+                        <span class="badge badge-ghost badge-sm">{{ agreement.partnerName }}</span>
+                      }
+                    </div>
+                  } @else {
+                    <span class="text-base-content/60">-</span>
+                  }
+                </td>
+                <td>{{ file.uploadedAt ? (file.uploadedAt | date: DATE_FORMATS.dateWithTime) : 'N/A' }}</td>
+                <td>
+                  <span class="badge" [class.badge-success]="file.origin === 'owned'" [class.badge-warning]="file.origin !== 'owned'">
+                    {{ file.origin | titlecase }}
+                  </span>
+                </td>
+                <td>
+                  <div class="flex justify-end gap-2">
+                    @if (file.origin === 'remote') {
+                      <button
+                        class="btn btn-sm"
+                        type="button"
+                        [disabled]="requestingTransferId === file.id"
+                        (click)="requestTransferAndDownload(file)">
+                        @if (requestingTransferId === file.id) {
+                          <span class="loading loading-spinner loading-xs"></span>
+                          Downloading
+                        } @else {
+                          <span class="material-symbols-rounded">download</span>
+                          Download
+                        }
+                      </button>
+                    }
+                    <button class="btn btn-sm btn-ghost" type="button" (click)="openDetails(file)">
+                      <span class="material-symbols-rounded">visibility</span>
+                      View
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  @if (!loading && filteredFiles.length > pageSize) {
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-base-content/70">
+        Showing {{ (currentPage - 1) * pageSize + 1 }}-{{ ((currentPage - 1) * pageSize) + pagedFiles.length }} of {{ filteredFiles.length }} files
+      </p>
+      <div class="join">
+        <button class="btn btn-sm join-item" type="button" [disabled]="currentPage === 1" (click)="previousPage()">Previous</button>
+        <button class="btn btn-sm join-item btn-active" type="button">Page {{ currentPage }} / {{ totalPages }}</button>
+        <button class="btn btn-sm join-item" type="button" [disabled]="currentPage === totalPages" (click)="nextPage()">Next</button>
+      </div>
+    </div>
+  }
+</div>
