@@ -109,6 +109,11 @@ export class ShellComponent implements OnInit {
       throw new Error('Missing participant EDC connector configuration in authentication claims.');
     }
 
+    config.authorization = {
+      key: config.authorization?.key ?? 'Authorization',
+      value: `Bearer ${this.auth.session()?.token ?? ''}`,
+    };
+
     return [config];
   }
 
