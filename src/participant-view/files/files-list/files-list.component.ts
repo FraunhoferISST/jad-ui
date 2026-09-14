@@ -11,6 +11,8 @@ import {
 import { FileAsset } from '../../models/file-asset.model';
 import { FileSharingFileResource } from '../../models/file-sharing-data.model';
 import { FileSharingApiService } from '../../services/file-sharing-api.service';
+import { FileDetailComponent } from '../file-detail/file-detail.component';
+import { FileUploadComponent } from '../file-upload/file-upload.component';
 import { asNumber, asString } from '../../utils/cast.utils';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
@@ -76,7 +78,24 @@ export class FilesListComponent {
   }
 
   openUpload(): void {
-    void this.router.navigate(['/files/upload']);
+    this.modalAndAlert.openModal(
+      FileUploadComponent,
+      {},
+      {
+        cancel: () => this.modalAndAlert.closeModal(),
+        uploaded: (count: number) => {
+          this.modalAndAlert.closeModal();
+          this.modalAndAlert.showAlert(
+            `Uploaded ${count} file(s) successfully.`,
+            'Upload complete',
+            'success',
+            6,
+          );
+          void this.loadData();
+        },
+      },
+      true,
+    );
   }
 
   openExplore(): void {
@@ -87,7 +106,14 @@ export class FilesListComponent {
     if (!file.id) {
       return;
     }
-    void this.router.navigate(['/files', file.id]);
+    this.modalAndAlert.openModal(
+      FileDetailComponent,
+      { fileId: file.id },
+      {
+        close: () => this.modalAndAlert.closeModal(),
+      },
+      true,
+    );
   }
 
   private applyFilters(): void {

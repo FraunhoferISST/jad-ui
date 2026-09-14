@@ -58,16 +58,6 @@ export class RedlineApiService {
     return Array.isArray(response) ? response : response ? [response] : [];
   }
 
-  async uploadFile(formData: FormData): Promise<void> {
-    const context = await this.contextService.resolve();
-    await firstValueFrom(
-      this.http.post<void>(
-        `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/files`,
-        formData,
-      ),
-    );
-  }
-
   async listContracts(): Promise<Contract[]> {
     const context = await this.contextService.resolve();
     const response = await firstValueFrom(

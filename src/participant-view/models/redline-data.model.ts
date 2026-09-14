@@ -104,10 +104,13 @@ export interface PartnerReferenceRequest {
 }
 
 export interface CelExpression {
+  '@type': string;
+  '@context'?: string[];
   '@id'?: string;
   leftOperand?: string;
   description?: string;
   scopes?: string[];
+  actions?: string[];
   expression?: string;
 }
 

@@ -1,6 +1,7 @@
 import { CelExpression, PolicySet } from '../models/redline-data.model';
 
 export const PARTNER_ACCESS_EXPRESSION: CelExpression = {
+  '@type': 'CelExpression',
   '@id': 'cert-partner-access-policy-expression',
   leftOperand: 'CounterPartyId',
   description: 'Evaluate counter party ID for certificate access',

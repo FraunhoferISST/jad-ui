@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, HostListener, inject, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, inject, Output, ViewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { PartnerReference, UseCase } from '../../models/redline-data.model';
@@ -19,7 +19,6 @@ import { formatFileSize } from '../../utils/format.utils';
 })
 export class FileUploadComponent {
   private readonly fb = inject(FormBuilder);
-  private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly useCaseService = inject(UseCaseService);
@@ -29,6 +28,9 @@ export class FileUploadComponent {
 
   @ViewChild('partnerDropdown') partnerDropdown?: ElementRef<HTMLElement>;
   @ViewChild('partnerTrigger') partnerTrigger?: ElementRef<HTMLElement>;
+
+  @Output() cancel = new EventEmitter<void>();
+  @Output() uploaded = new EventEmitter<number>();
 
   readonly formatFileSize = formatFileSize;
 
@@ -179,13 +181,7 @@ export class FileUploadComponent {
         await this.uploadService.uploadFile(file, useCaseId, partnerIds);
       }
 
-      this.modalAndAlert.showAlert(
-        `Uploaded ${this.selectedFiles.length} file(s) successfully.`,
-        'Upload complete',
-        'success',
-        6,
-      );
-      void this.router.navigate(['/files']);
+      this.uploaded.emit(this.selectedFiles.length);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to upload file.';
       this.modalAndAlert.showAlert(message, 'Upload failed', 'error', 8);
@@ -195,7 +191,7 @@ export class FileUploadComponent {
   }
 
   closeUpload(): void {
-    void this.router.navigate(['/files']);
+    this.cancel.emit();
   }
 
   togglePartnerDropdown(): void {

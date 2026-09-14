@@ -1,6 +1,5 @@
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Component, EventEmitter, inject, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
@@ -14,12 +13,13 @@ import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
   imports: [CommonModule, DatePipe, TitleCasePipe],
   templateUrl: './file-detail.component.html',
 })
-export class FileDetailComponent {
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
+export class FileDetailComponent implements OnChanges {
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly filesService = inject(FilesService);
   private readonly transferService = inject(TransferService);
+
+  @Input() fileId = '';
+  @Output() close = new EventEmitter<void>();
 
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
@@ -27,10 +27,6 @@ export class FileDetailComponent {
   file: FileAsset | null = null;
   loading = true;
   requestingTransfer = false;
-
-  constructor() {
-    void this.load();
-  }
 
   async download(): Promise<void> {
     if (!this.file) {
@@ -52,21 +48,26 @@ export class FileDetailComponent {
     }
   }
 
-  back(): void {
-    void this.router.navigate(['/files']);
+  closeDetails(): void {
+    this.close.emit();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['fileId'] && this.fileId) {
+      void this.load();
+    }
   }
 
   private async load(): Promise<void> {
     this.loading = true;
-    const id = this.route.snapshot.paramMap.get('id');
-    if (!id) {
+    if (!this.fileId) {
       this.loading = false;
       return;
     }
 
     try {
       const files = await this.filesService.getFilesForFilesView();
-      const file = files.find(item => item.id === id);
+      const file = files.find(item => item.id === this.fileId);
       if (!file) {
         this.file = null;
         return;
