@@ -191,7 +191,7 @@ curl -sS -L "${jwtlet_mappings_url}" -H "Authorization: Bearer ${ST}" \
       managementApiVersion: $mgmt_version,
       defaultUrl: $default,
       protocolUrl: $dsp,
-      protocolVersion: "dataspace-protocol-http:2025-1",
+      protocolVersion: "http-dsp-profile-2025-1",
       did: $did,
       authorization: {
         key: "Authorization",
