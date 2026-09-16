@@ -12,6 +12,8 @@ import { DataspaceService } from './dataspace.service';
 import { PartnerService } from './partner.service';
 import { RedlineApiService } from './redline-api.service';
 import { UseCaseService } from './use-case.service';
+import { EdcClientService } from '@eclipse-edc/dashboard-core';
+import { resolveDidProtocolEndpoint } from '../utils/did.utils';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
@@ -19,6 +21,7 @@ export class CatalogService {
   private readonly useCases = inject(UseCaseService);
   private readonly dataspaces = inject(DataspaceService);
   private readonly partners = inject(PartnerService);
+  private readonly edcClientService = inject(EdcClientService);
 
   async getCatalogForAllPartners(): Promise<FileAsset[]> {
     const partnerList = await this.partners.getPartners();
@@ -35,14 +38,21 @@ export class CatalogService {
     if (!partner.identifier) {
       return [];
     }
+    const protocolEndpoint = await resolveDidProtocolEndpoint(partner.identifier, false);
+    if (!protocolEndpoint) {
+      return [];
+    }
 
     const [catalog, useCases, dataspace] = await Promise.all([
-      this.redline.requestCatalog(partner.identifier),
+      (await this.edcClientService.getClient()).management.catalog.request({
+        counterPartyId: partner.identifier,
+        counterPartyAddress: protocolEndpoint
+      }),
       this.useCases.getUseCases(),
       this.dataspaces.getPrimaryDataspace(),
     ]);
 
-    return (catalog.dataset ?? []).map(dataset => {
+    return (catalog.datasets ?? []).map(dataset => {
       const properties = dataset['edc:properties'] ?? {};
       const useCaseId = asString(properties['edc:useCase']);
       const originalFilename = asString(properties['edc:originalFilename']) ?? 'N/A';
