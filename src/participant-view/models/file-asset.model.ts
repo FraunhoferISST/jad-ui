@@ -4,10 +4,7 @@ export interface FileAsset {
   id: string;
   name: string;
   description?: string;
-  useCase?: string;
-  useCaseLabel?: string;
   origin: 'owned' | 'remote';
-  dataspace?: string;
   uploadedAt: string;
   updatedAt?: string;
   size?: number;

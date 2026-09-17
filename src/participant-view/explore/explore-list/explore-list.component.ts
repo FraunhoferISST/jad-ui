@@ -7,12 +7,11 @@ import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
-import { PartnerReference, UseCase } from '../../models/redline-data.model';
+import { PartnerReference } from '../../models/redline-data.model';
 import { CatalogService } from '../../services/catalog.service';
 import { FilesService } from '../../services/files.service';
 import { PartnerService } from '../../services/partner.service';
 import { TransferService } from '../../services/transfer.service';
-import { UseCaseService } from '../../services/use-case.service';
 
 @Component({
   selector: 'participant-explore-list',
@@ -26,26 +25,22 @@ export class ExploreListComponent {
   private readonly router = inject(Router);
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly filesService = inject(FilesService);
-  private readonly useCaseService = inject(UseCaseService);
   private readonly partnerService = inject(PartnerService);
   private readonly catalogService = inject(CatalogService);
   private readonly transferService = inject(TransferService);
 
   readonly filterForm = this.fb.nonNullable.group({
     searchTerm: [''],
-    useCaseFilter: [''],
     companyFilter: [''],
   });
 
   files: FileAsset[] = [];
   filteredFiles: FileAsset[] = [];
-  useCases: UseCase[] = [];
   partners: PartnerReference[] = [];
   loading = true;
   requestingAccessId: string | null = null;
   requestingTransferId: string | null = null;
   searchText = '';
-  useCaseFilter = '';
   companyFilter = '';
   currentPage = 1;
   pageSize = 10;
@@ -120,14 +115,12 @@ export class ExploreListComponent {
   private async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [files, useCases, partners] = await Promise.all([
+      const [files, partners] = await Promise.all([
         this.filesService.getFilesForExploreView(),
-        this.useCaseService.getUseCases(),
         this.partnerService.getPartners(),
       ]);
 
       this.files = files;
-      this.useCases = useCases;
       this.partners = partners;
       this.applyFilters();
     } catch (error) {
@@ -147,13 +140,6 @@ export class ExploreListComponent {
         this.applyFilters();
       });
 
-    this.filterForm.controls.useCaseFilter.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(value => {
-        this.useCaseFilter = value;
-        this.applyFilters();
-      });
-
     this.filterForm.controls.companyFilter.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(value => {
@@ -170,20 +156,13 @@ export class ExploreListComponent {
         const fields = [
           file.name,
           file.type,
-          file.useCase,
-          file.useCaseLabel,
           file.partnerName,
-          file.dataspace,
         ]
           .filter((field): field is string => typeof field === 'string')
           .map(field => field.toLowerCase());
 
         return fields.some(field => field.includes(this.searchText));
       });
-    }
-
-    if (this.useCaseFilter) {
-      next = next.filter(file => file.useCase === this.useCaseFilter);
     }
 
     if (this.companyFilter) {

@@ -2,24 +2,20 @@ import { inject, Injectable } from '@angular/core';
 
 import { Agreement, FileAsset } from '../models/file-asset.model';
 import {
-  Contract,
-  ContractRequest,
-  Dataset,
-  PartnerReference,
+    Contract,
+    ContractRequest,
+    PartnerReference,
 } from '../models/redline-data.model';
-import { asNumber, asString } from '../utils/cast.utils';
-import { DataspaceService } from './dataspace.service';
+import { asString } from '../utils/cast.utils';
 import { PartnerService } from './partner.service';
 import { RedlineApiService } from './redline-api.service';
-import { UseCaseService } from './use-case.service';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import { resolveDidProtocolEndpoint } from '../utils/did.utils';
+import { Catalog, Dataset } from '@think-it-labs/edc-connector-client';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
   private readonly redline = inject(RedlineApiService);
-  private readonly useCases = inject(UseCaseService);
-  private readonly dataspaces = inject(DataspaceService);
   private readonly partners = inject(PartnerService);
   private readonly edcClientService = inject(EdcClientService);
 
@@ -38,42 +34,31 @@ export class CatalogService {
     if (!partner.identifier) {
       return [];
     }
+
     const protocolEndpoint = await resolveDidProtocolEndpoint(partner.identifier, false);
     if (!protocolEndpoint) {
       return [];
     }
 
-    const [catalog, useCases, dataspace] = await Promise.all([
-      (await this.edcClientService.getClient()).management.catalog.request({
-        counterPartyId: partner.identifier,
-        counterPartyAddress: protocolEndpoint
-      }),
-      this.useCases.getUseCases(),
-      this.dataspaces.getPrimaryDataspace(),
-    ]);
+    const catalog = await (await this.edcClientService.getClient()).management.catalog.request({
+      counterPartyId: partner.identifier,
+      counterPartyAddress: protocolEndpoint
+    });
+    const compacted = await this.edcClientService.compact(catalog);
+    console.log(compacted["http://www.w3.org/ns/dcat#dataset"] as Dataset[]);
 
-    return (catalog.datasets ?? []).map(dataset => {
-      const properties = dataset['edc:properties'] ?? {};
-      const useCaseId = asString(properties['edc:useCase']);
-      const originalFilename = asString(properties['edc:originalFilename']) ?? 'N/A';
-      const assetId = asString(properties['edc:assetId']);
-      const fileId = asString(properties['edc:fileId']) ?? originalFilename;
-
+    return catalog.datasets.map(dataset => {
       return {
-        id: fileId,
-        name: originalFilename,
-        description: asString(properties['description']) ?? 'N/A',
-        useCase: useCaseId,
-        useCaseLabel: useCases.find(item => item.id === useCaseId)?.label,
+        id: dataset.optionalValue('edc', 'fileId'),
+        name: dataset.mandatoryValue('edc', 'name'),
         origin: 'remote',
-        uploadedAt: 'N/A',
-        dataspace: dataspace.name,
-        catalogDataset: dataset,
+        uploadedAt: dataset.optionalValue('edc', 'name'),
+        assetId: dataset.mandatoryValue('edc', 'assetId'),
+        size: dataset.optionalValue('edc', 'size'),
+        partnerDid: catalog.participantId,
         partnerName: partner.nickname,
-        partnerDid: partner.identifier,
-        assetId,
-        size: asNumber(properties['edc:size']),
-      } satisfies FileAsset;
+        catalogDataset: dataset,
+      } as FileAsset
     });
   }
 
@@ -124,26 +109,26 @@ export class CatalogService {
   }
 
   async requestAccess(file: FileAsset): Promise<void> {
-    const dataset = file.catalogDataset as Dataset | undefined;
-    const properties = dataset?.['edc:properties'];
-    const assetId = asString(properties?.['edc:assetId']);
-    const firstPolicy = dataset?.hasPolicy?.[0];
-    const firstOfferId = firstPolicy?.['@id'];
-    const permissions = firstPolicy?.permission?.flatMap(permission => permission.constraint ?? []);
-
-    if (!assetId || !file.partnerDid || !firstOfferId) {
-      throw new Error('Missing data required to request access.');
-    }
-
-    const request: ContractRequest = {
-      offerId: firstOfferId,
-      providerId: file.partnerDid,
-      assetId,
-      permissions,
-    };
-
-    const negotiationId = await this.redline.requestContract(request);
-    await this.waitForContractFinalization(negotiationId);
+    // const dataset = file.catalogDataset as Dataset | undefined;
+    // const properties = dataset?.['edc:properties'];
+    // const assetId = asString(properties?.['edc:assetId']);
+    // const firstPolicy = dataset?.hasPolicy?.[0];
+    // const firstOfferId = firstPolicy?.['@id'];
+    // const permissions = firstPolicy?.permission?.flatMap(permission => permission.constraint ?? []);
+    //
+    // if (!assetId || !file.partnerDid || !firstOfferId) {
+    //   throw new Error('Missing data required to request access.');
+    // }
+    //
+    // const request: ContractRequest = {
+    //   offerId: firstOfferId,
+    //   providerId: file.partnerDid,
+    //   assetId,
+    //   permissions,
+    // };
+    //
+    // const negotiationId = await this.redline.requestContract(request);
+    // await this.waitForContractFinalization(negotiationId);
   }
 
   private async waitForContractFinalization(negotiationId: string): Promise<void> {

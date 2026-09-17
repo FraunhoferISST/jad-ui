@@ -4,14 +4,6 @@ export interface DataspaceResource {
   properties?: Record<string, unknown>;
 }
 
-export interface UseCase {
-  id: string;
-  name: string;
-  label: string;
-  description?: string;
-  icon?: string;
-}
-
 export interface PartnerReference {
   identifier: string;
   nickname?: string;

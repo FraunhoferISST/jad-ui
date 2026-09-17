@@ -1,14 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, EventEmitter, HostListener, inject, Output, ViewChild } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
-import { PartnerReference, UseCase } from '../../models/redline-data.model';
+import { PartnerReference } from '../../models/redline-data.model';
 import { ParticipantConfigService } from '../../services/participant-config.service';
 import { PartnerService } from '../../services/partner.service';
 import { UploadService } from '../../services/upload.service';
-import { UseCaseService } from '../../services/use-case.service';
 import { formatFileSize } from '../../utils/format.utils';
 
 @Component({
@@ -19,9 +17,7 @@ import { formatFileSize } from '../../utils/format.utils';
 })
 export class FileUploadComponent {
   private readonly fb = inject(FormBuilder);
-  private readonly route = inject(ActivatedRoute);
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly useCaseService = inject(UseCaseService);
   private readonly partnerService = inject(PartnerService);
   private readonly uploadService = inject(UploadService);
   private readonly configService = inject(ParticipantConfigService);
@@ -35,19 +31,16 @@ export class FileUploadComponent {
   readonly formatFileSize = formatFileSize;
 
   readonly form = this.fb.nonNullable.group({
-    useCase: ['', Validators.required],
     partnerIds: [[] as string[]],
   });
 
   uploadStep = 1;
   selectedFiles: File[] = [];
-  useCases: UseCase[] = [];
   partners: PartnerReference[] = [];
   filePreviewData: Array<{
     name: string;
     size: number;
     type: string;
-    useCase?: string;
     partners?: string[];
   }> = [];
 
@@ -60,9 +53,8 @@ export class FileUploadComponent {
 
   readonly uploadSteps = [
     { label: 'Select file', number: 1 },
-    { label: 'Details', number: 2 },
-    { label: 'Access', number: 3 },
-    { label: 'Review', number: 4 },
+    { label: 'Access', number: 2 },
+    { label: 'Review', number: 3 },
   ];
 
   constructor() {
@@ -124,7 +116,7 @@ export class FileUploadComponent {
       return;
     }
 
-    if (this.uploadStep === 3) {
+    if (this.uploadStep === 2) {
       this.preparePreview();
     }
 
@@ -141,7 +133,7 @@ export class FileUploadComponent {
     if (!this.canNavigateToStep(step)) {
       return;
     }
-    if (step === 4) {
+    if (step === 3) {
       this.preparePreview();
     }
     this.uploadStep = step;
@@ -158,9 +150,6 @@ export class FileUploadComponent {
     if (this.uploadStep === 1) {
       return this.selectedFiles.length > 0;
     }
-    if (this.uploadStep === 2) {
-      return this.form.controls.useCase.valid;
-    }
     return true;
   }
 
@@ -169,16 +158,12 @@ export class FileUploadComponent {
       return;
     }
 
-    const useCaseId = this.form.controls.useCase.value;
     const partnerIds = this.form.controls.partnerIds.value;
-    if (!useCaseId) {
-      return;
-    }
 
     this.uploading = true;
     try {
       for (const file of this.selectedFiles) {
-        await this.uploadService.uploadFile(file, useCaseId, partnerIds);
+        await this.uploadService.uploadFile(file, partnerIds);
       }
 
       this.uploaded.emit(this.selectedFiles.length);
@@ -240,15 +225,12 @@ export class FileUploadComponent {
   }
 
   private preparePreview(): void {
-    const selectedUseCaseId = this.form.controls.useCase.value;
-    const selectedUseCase = this.useCases.find(useCase => useCase.id === selectedUseCaseId);
     const selectedPartnerLabels = this.getSelectedPartnerLabels();
 
     this.filePreviewData = this.selectedFiles.map(file => ({
       name: file.name,
       size: file.size,
       type: file.type || 'application/octet-stream',
-      useCase: selectedUseCase?.label,
       partners: selectedPartnerLabels.length > 0 ? selectedPartnerLabels : undefined,
     }));
   }
@@ -256,21 +238,14 @@ export class FileUploadComponent {
   private async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [useCases, partners, uploadConfig] = await Promise.all([
-        this.useCaseService.getUseCases(),
+      const [partners, uploadConfig] = await Promise.all([
         this.partnerService.getPartners(),
         this.configService.getUploadConfig(),
       ]);
 
-      this.useCases = useCases;
       this.partners = partners;
       this.maxFileSize = uploadConfig.maxFileSize;
       this.allowedFileTypes = uploadConfig.allowedFileTypes;
-
-      const preselectedUseCase = this.route.snapshot.queryParamMap.get('useCase');
-      if (preselectedUseCase && this.useCases.some(useCase => useCase.id === preselectedUseCase)) {
-        this.form.patchValue({ useCase: preselectedUseCase });
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load upload metadata.';
       this.modalAndAlert.showAlert(message, 'Upload setup', 'error', 8);

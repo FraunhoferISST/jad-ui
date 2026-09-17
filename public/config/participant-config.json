@@ -1,13 +1,5 @@
 {
   "defaultServiceProviderId": 1,
-  "useCases": [
-    {
-      "id": "uc-certificate-management",
-      "name": "certificate-management",
-      "label": "Certificate Management",
-      "description": "Manage your certificate sharing with partners"
-    }
-  ],
   "upload": {
     "maxFileSize": 10485760,
     "allowedFileTypes": []

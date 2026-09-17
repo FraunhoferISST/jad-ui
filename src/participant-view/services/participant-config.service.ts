@@ -2,8 +2,6 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-import { UseCase } from '../models/redline-data.model';
-
 export interface ParticipantUploadConfig {
   maxFileSize: number;
   allowedFileTypes: string[];
@@ -14,21 +12,12 @@ export interface ParticipantFileSharingConfig {
 }
 
 interface ParticipantFeatureConfig {
-  useCases: UseCase[];
   upload: ParticipantUploadConfig;
   fileSharing: ParticipantFileSharingConfig;
   defaultServiceProviderId?: number;
 }
 
 const DEFAULT_CONFIG: ParticipantFeatureConfig = {
-  useCases: [
-    {
-      id: 'uc-certificate-management',
-      name: 'certificate-management',
-      label: 'Certificate Management',
-      description: 'Manage your certificate sharing with partners',
-    },
-  ],
   upload: {
     maxFileSize: 10 * 1024 * 1024,
     allowedFileTypes: [],
@@ -52,10 +41,6 @@ export class ParticipantConfigService {
     return this.configPromise;
   }
 
-  async getUseCases(): Promise<UseCase[]> {
-    return (await this.getConfig()).useCases;
-  }
-
   async getUploadConfig(): Promise<ParticipantUploadConfig> {
     return (await this.getConfig()).upload;
   }
@@ -74,8 +59,6 @@ export class ParticipantConfigService {
       const loaded = await firstValueFrom(
         this.http.get<Partial<ParticipantFeatureConfig>>('config/participant-config.json'),
       );
-
-      const useCases = Array.isArray(loaded.useCases) ? loaded.useCases : DEFAULT_CONFIG.useCases;
 
       const upload: ParticipantUploadConfig = {
         maxFileSize:
@@ -99,7 +82,7 @@ export class ParticipantConfigService {
           ? loaded.defaultServiceProviderId
           : DEFAULT_CONFIG.defaultServiceProviderId;
 
-      return { useCases, upload, fileSharing, defaultServiceProviderId };
+      return { upload, fileSharing, defaultServiceProviderId };
     } catch {
       return DEFAULT_CONFIG;
     }

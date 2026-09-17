@@ -1,6 +1,6 @@
 <form
   [formGroup]="form"
-  (ngSubmit)="uploadStep < 4 ? nextStep() : upload()"
+  (ngSubmit)="uploadStep < 3 ? nextStep() : upload()"
   class="grid grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0">
   <h1 class="text-xl text-center divider m-0">Upload file</h1>
 
@@ -47,25 +47,6 @@
     }
 
     @if (uploadStep === 2) {
-      <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
-        <legend class="fieldset-legend text-sm">Metadata</legend>
-        <legend class="fieldset-label">Use case</legend>
-        <label class="select w-full" [class.select-error]="form.controls.useCase.invalid">
-          <span class="label">Use case</span>
-          <select formControlName="useCase">
-            <option value="" disabled>Select a use case</option>
-            @for (uc of useCases; track uc.id) {
-              <option [value]="uc.id">{{ uc.label }}</option>
-            }
-          </select>
-        </label>
-        @if (form.controls.useCase.invalid) {
-          <p class="fieldset-label text-error">Use case is required.</p>
-        }
-      </fieldset>
-    }
-
-    @if (uploadStep === 3) {
       <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
         <legend class="fieldset-legend text-sm">Access restrictions</legend>
 
@@ -117,7 +98,7 @@
       </fieldset>
     }
 
-    @if (uploadStep === 4) {
+    @if (uploadStep === 3) {
       <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
         <legend class="fieldset-legend text-sm">Review</legend>
         <ul class="list rounded-box border border-base-300 bg-base-100">
@@ -128,9 +109,6 @@
                 <p class="font-medium">{{ preview.name }}</p>
                 <p class="text-xs text-base-content/70">
                   {{ preview.type }} - {{ formatFileSize(preview.size) }}
-                </p>
-                <p class="text-xs text-base-content/70">
-                  Use case: {{ preview.useCase || 'N/A' }}
                 </p>
                 @if (preview.partners?.length) {
                   <p class="text-xs text-base-content/70">Partners: {{ preview.partners?.join(', ') }}</p>
@@ -155,10 +133,10 @@
       </button>
 
       <button class="btn" type="button" (click)="closeUpload()">
-        {{ uploadStep === 4 ? 'Close' : 'Cancel' }}
+        {{ uploadStep === 3 ? 'Close' : 'Cancel' }}
       </button>
 
-      @if (uploadStep < 4) {
+      @if (uploadStep < 3) {
         <button class="btn btn-primary ml-auto" type="submit" [disabled]="!canProceed() || loading">
           Continue
         </button>

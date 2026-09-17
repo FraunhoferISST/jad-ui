@@ -7,24 +7,15 @@
   <form class="grid gap-3 rounded-2xl border border-base-300 bg-base-200 p-4 md:grid-cols-3" [formGroup]="filterForm">
     <label class="input w-full md:col-span-2">
       <span class="material-symbols-rounded opacity-70">search</span>
-      <input type="text" formControlName="searchTerm" placeholder="Search by file name, company, use case, dataspace" />
+      <input type="text" formControlName="searchTerm" placeholder="Search by file name or company" />
     </label>
 
-    <div class="grid grid-cols-2 gap-3">
-      <select class="select w-full" formControlName="useCaseFilter">
-        <option value="">All use cases</option>
-        @for (uc of useCases; track uc.id) {
-          <option [value]="uc.id">{{ uc.label }}</option>
-        }
-      </select>
-
-      <select class="select w-full" formControlName="companyFilter">
-        <option value="">All companies</option>
-        @for (partner of partners; track partner.identifier) {
-          <option [value]="partner.identifier">{{ partner.nickname || partner.identifier }}</option>
-        }
-      </select>
-    </div>
+    <select class="select w-full" formControlName="companyFilter">
+      <option value="">All companies</option>
+      @for (partner of partners; track partner.identifier) {
+        <option [value]="partner.identifier">{{ partner.nickname || partner.identifier }}</option>
+      }
+    </select>
   </form>
 
   <div class="rounded-2xl border border-base-300 bg-base-100 shadow-sm">
@@ -34,9 +25,7 @@
           <tr>
             <th>Name</th>
             <th>Type</th>
-            <th>Use case</th>
             <th>Company</th>
-            <th>Dataspace</th>
             <th>Access</th>
             <th class="text-right">Action</th>
           </tr>
@@ -44,13 +33,13 @@
         <tbody>
           @if (loading) {
             <tr>
-              <td colspan="7" class="py-12 text-center">
+              <td colspan="5" class="py-12 text-center">
                 <span class="loading loading-spinner loading-lg"></span>
               </td>
             </tr>
           } @else if (pagedFiles.length === 0) {
             <tr>
-              <td colspan="7" class="py-12 text-center">
+              <td colspan="5" class="py-12 text-center">
                 <div class="flex flex-col items-center gap-2 opacity-75">
                   <span class="material-symbols-rounded text-3xl">travel_explore</span>
                   <p class="font-medium">No remote files found</p>
@@ -68,9 +57,7 @@
                   }
                 </td>
                 <td><span class="badge badge-soft">{{ file.type || 'N/A' }}</span></td>
-                <td>{{ file.useCaseLabel || file.useCase || 'N/A' }}</td>
                 <td>{{ file.partnerName || 'N/A' }}</td>
-                <td>{{ file.dataspace || 'N/A' }}</td>
                 <td>
                   @if (hasAccess(file)) {
                     <span class="badge badge-success badge-soft">Has access</span>

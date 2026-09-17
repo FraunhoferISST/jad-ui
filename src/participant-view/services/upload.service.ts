@@ -53,7 +53,6 @@ export class UploadService {
 
   async uploadFile(
     file: File,
-    useCaseId: string,
     partnerIds: string[],
   ): Promise<void> {
     const ids = this.createResourceIds();
@@ -62,7 +61,6 @@ export class UploadService {
     const formData = new FormData();
 
     const publicMetadata = {
-      useCase: useCaseId,
       size: file.size,
       assetId: ids.assetId,
       originalFilename: file.name,
@@ -113,7 +111,6 @@ export class UploadService {
         assetId: ids.assetId,
         file,
         fileId,
-        useCaseId,
         partnerIds: normalizedPartnerIds,
       });
       await client.management.assets.create(assetInput);
@@ -252,7 +249,6 @@ export class UploadService {
     assetId: string;
     file: File;
     fileId: string;
-    useCaseId: string;
     partnerIds: string[];
   }): Promise<AssetInput> {
     const participantContextId = this.auth.user()?.participantContextId;
@@ -271,7 +267,6 @@ export class UploadService {
         contenttype: params.file.type || 'application/octet-stream',
         'edc:assetId': params.assetId,
         'edc:fileId': params.fileId,
-        'edc:useCase': params.useCaseId,
         'edc:originalFilename': params.file.name,
         'edc:size': String(params.file.size),
       },
