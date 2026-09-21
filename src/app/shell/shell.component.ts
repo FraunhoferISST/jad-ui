@@ -7,6 +7,8 @@ import { canAccess } from '../auth/access-rules';
 import { UserMenuComponent } from './user-menu.component';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
 import { RedlineService } from '../../operator-view/services/redline.service';
+import { CelExpressionsController } from '../../participant-view/edc-controllers/cel-expression.controller';
+import { V5ContractAgreementController } from '../../participant-view/edc-controllers/contract-agreements-v5.controller';
 
 /** Local-storage key the library's DashboardStateService uses to persist the
  * currently selected connector. We clear it on load so the connector is chosen
@@ -113,6 +115,11 @@ export class ShellComponent implements OnInit {
       key: config.authorization?.key ?? 'Authorization',
       value: `Bearer ${this.auth.session()?.token ?? ''}`,
     };
+
+    config.customControllers = {
+      'celExpressions': CelExpressionsController,
+      'v5contractAgreements': V5ContractAgreementController
+    }
 
     return [config];
   }

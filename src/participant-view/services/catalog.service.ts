@@ -1,21 +1,27 @@
 import { inject, Injectable } from '@angular/core';
 
-import { Agreement, FileAsset } from '../models/file-asset.model';
-import {
-    Contract,
-    ContractRequest,
-    PartnerReference,
-} from '../models/redline-data.model';
-import { asString } from '../utils/cast.utils';
-import { PartnerService } from './partner.service';
-import { RedlineApiService } from './redline-api.service';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
+import {
+  ContractAgreement,
+  Dataset,
+  JsonLdService,
+  Offer,
+  PolicyBuilder,
+} from '@think-it-labs/edc-connector-client';
+
+import { Agreement, FileAsset } from '../models/file-asset.model';
+import { PartnerReference } from '../models/redline-data.model';
 import { resolveDidProtocolEndpoint } from '../utils/did.utils';
-import { Catalog, Dataset } from '@think-it-labs/edc-connector-client';
+import { PartnerService } from './partner.service';
+import { ExtendedEdcClient } from '../models/edc.model';
+import jsonld, { ContextDefinition } from 'jsonld';
+import dspace2025Data from "../models/contexts/dspace-2025.json";
+import edcDspaceData from "../models/contexts/edc-dspace.json";
+import odrlProfileData from "../models/contexts/odrl-profile.json";
+import managementV2Data from "../models/contexts/management-v2.json";
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
-  private readonly redline = inject(RedlineApiService);
   private readonly partners = inject(PartnerService);
   private readonly edcClientService = inject(EdcClientService);
 
@@ -40,12 +46,11 @@ export class CatalogService {
       return [];
     }
 
-    const catalog = await (await this.edcClientService.getClient()).management.catalog.request({
+    let catalog = await (await this.edcClientService.getClient()).management.catalog.request({
       counterPartyId: partner.identifier,
       counterPartyAddress: protocolEndpoint
     });
-    const compacted = await this.edcClientService.compact(catalog);
-    console.log(compacted["http://www.w3.org/ns/dcat#dataset"] as Dataset[]);
+
 
     return catalog.datasets.map(dataset => {
       return {
@@ -55,6 +60,7 @@ export class CatalogService {
         uploadedAt: dataset.optionalValue('edc', 'name'),
         assetId: dataset.mandatoryValue('edc', 'assetId'),
         size: dataset.optionalValue('edc', 'size'),
+        type: dataset.optionalValue('edc', 'contenttype'),
         partnerDid: catalog.participantId,
         partnerName: partner.nickname,
         catalogDataset: dataset,
@@ -63,8 +69,8 @@ export class CatalogService {
   }
 
   async matchContractsToFiles(files: FileAsset[]): Promise<FileAsset[]> {
-    const [contracts, partners] = await Promise.all([
-      this.redline.listContracts(),
+    const [agreements, partners] = await Promise.all([
+      this.listAgreements(),
       this.partners.getPartners(),
     ]);
 
@@ -72,21 +78,21 @@ export class CatalogService {
       partners.filter(item => !!item.identifier).map(item => [item.identifier, item.nickname ?? 'N/A']),
     );
 
-    for (const contract of contracts) {
-      if (!contract.assetId || contract.pending) {
+    for (const agreement of agreements) {
+      if (!agreement.assetId) {
         continue;
       }
 
-      const matchingFiles = files.filter(file => file.assetId === contract.assetId);
+      const matchingFiles = files.filter(file => file.assetId === agreement.assetId);
       for (const file of matchingFiles) {
-        const agreement = this.toAgreement(contract, partnerNames);
-        if (!agreement) {
+        const converted = this.toAgreement(agreement, partnerNames);
+        if (!converted) {
           continue;
         }
 
-        file.agreements = [...(file.agreements ?? []), agreement];
-        if (file.uploadedAt === 'N/A' && agreement.createdAt) {
-          file.uploadedAt = agreement.createdAt;
+        file.agreements = [...(file.agreements ?? []), converted];
+        if (file.uploadedAt === 'N/A' && converted.createdAt) {
+          file.uploadedAt = converted.createdAt;
         }
       }
     }
@@ -94,41 +100,68 @@ export class CatalogService {
     return files;
   }
 
-  private toAgreement(contract: Contract, partnerNames: Map<string, string>): Agreement | null {
-    if (!contract.id || !contract.counterParty) {
+  private async listAgreements(): Promise<ContractAgreement[]> {
+    const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
+    return client.v5contractAgreements.queryAll({"@type": 'QuerySpec'});
+  }
+
+  private toAgreement(
+    agreement: ContractAgreement,
+    partnerNames: Map<string, string>,
+  ): Agreement | null {
+    const agreementId = agreement['agreementId'];
+    if (!agreementId || !agreement.providerId) {
       return null;
     }
 
     return {
-      id: contract.id,
-      partnerId: contract.counterParty,
-      partnerName: partnerNames.get(contract.counterParty) ?? contract.counterParty,
-      status: contract.pending ? 'Pending' : 'Active',
-      createdAt: contract.signingDate ?? '',
+      id: agreementId,
+      partnerId: agreement.providerId,
+      partnerName: partnerNames.get(agreement.providerId) ?? agreement.providerId,
+      status: 'Active',
+      createdAt: agreement.contractSigningDate
+        ? new Date(agreement.contractSigningDate).toISOString()
+        : '',
     };
   }
 
   async requestAccess(file: FileAsset): Promise<void> {
-    // const dataset = file.catalogDataset as Dataset | undefined;
-    // const properties = dataset?.['edc:properties'];
-    // const assetId = asString(properties?.['edc:assetId']);
-    // const firstPolicy = dataset?.hasPolicy?.[0];
-    // const firstOfferId = firstPolicy?.['@id'];
-    // const permissions = firstPolicy?.permission?.flatMap(permission => permission.constraint ?? []);
-    //
-    // if (!assetId || !file.partnerDid || !firstOfferId) {
-    //   throw new Error('Missing data required to request access.');
-    // }
-    //
-    // const request: ContractRequest = {
-    //   offerId: firstOfferId,
-    //   providerId: file.partnerDid,
-    //   assetId,
-    //   permissions,
-    // };
-    //
-    // const negotiationId = await this.redline.requestContract(request);
-    // await this.waitForContractFinalization(negotiationId);
+    const dataset = file.catalogDataset as Dataset | undefined;
+    let offer = dataset?.offers?.[0];
+
+    if (!file.assetId || !file.partnerDid || !offer) {
+      throw new Error('Missing data required to request access.');
+    }
+
+    const protocolEndpoint = await resolveDidProtocolEndpoint(file.partnerDid, false);
+    if (!protocolEndpoint) {
+      throw new Error('Could not resolve protocol endpoint for partner.');
+    }
+
+    const service = new JsonLdService();
+    const context: ContextDefinition = {
+      "@context": [
+        "https://w3id.org/dspace/2025/1/context.jsonld",
+        "https://w3id.org/edc/dspace/v0.0.1"
+      ]
+    } as ContextDefinition;
+    const compacted = await service.compact(dataset, context);
+    console.log(JSON.stringify(compacted));
+
+    let policyCompacted = (compacted['hasPolicy'] as Array<any>)[0];
+    policyCompacted['target'] = dataset?.['@id'];
+    policyCompacted['assigner'] = file.partnerDid;
+
+    const policy = new PolicyBuilder().raw(policyCompacted).build();
+    const negotiationId = (
+      await (await this.edcClientService.getClient()).management.contractNegotiations.initiate({
+        counterPartyId: file.partnerDid,
+        counterPartyAddress: protocolEndpoint,
+        policy: policy
+      })
+    ).id;
+
+    await this.waitForContractFinalization(negotiationId);
   }
 
   private async waitForContractFinalization(negotiationId: string): Promise<void> {
@@ -138,7 +171,9 @@ export class CatalogService {
 
     while (Date.now() - startedAt < maxWaitMs) {
       await this.delay(pollMs);
-      const negotiation = await this.redline.getContractNegotiation(negotiationId);
+      const negotiation = await (
+        await this.edcClientService.getClient()
+      ).management.contractNegotiations.get(negotiationId);
       if ((negotiation.state ?? '').toUpperCase() === 'FINALIZED') {
         return;
       }

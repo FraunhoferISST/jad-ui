@@ -1,32 +1,50 @@
 import { inject, Injectable } from '@angular/core';
 
+import { EdcClientService } from '@eclipse-edc/dashboard-core';
+import {
+  HttpDataAddress,
+  TransferProcess,
+} from '@think-it-labs/edc-connector-client';
+
 import { FileAsset, Transaction } from '../models/file-asset.model';
-import { TransferProcess } from '../models/redline-data.model';
-import { RedlineApiService } from './redline-api.service';
+import { resolveDidProtocolEndpoint } from '../utils/did.utils';
 
 @Injectable({ providedIn: 'root' })
 export class TransferService {
-  private readonly redline = inject(RedlineApiService);
+  private readonly edcClientService = inject(EdcClientService);
 
   async requestTransferAndDownload(file: FileAsset): Promise<void> {
-    if (!file.agreements?.[0]?.id || !file.catalogDataset?.distribution?.[0]?.format || !file.partnerDid) {
+    const transferProcess = await this.requestTransfer(file);
+    await this.waitForTransferStarted(transferProcess);
+    // TODO: Implement the actual download from the provider data plane once the
+    // EDR (endpoint data reference) is available after the transfer reaches STARTED.
+  }
+
+  async requestTransfer(file: FileAsset): Promise<string> {
+    if (!file.agreements?.[0]?.id || !file.partnerDid) {
       throw new Error('Missing file data required for transfer and download.');
     }
 
-    const transferProcessId = await this.redline.requestTransfer({
-      contractId: file.agreements[0].id,
-      counterPartyId: file.partnerDid,
-      transferType: file.catalogDataset.distribution[0].format,
-    });
-
-    const transferProcess = await this.waitForTransferStarted(transferProcessId);
-    const token = this.getDownloadToken(transferProcess);
-    if (!token) {
-      throw new Error('No authorization token returned for download.');
+    const protocolEndpoint = await resolveDidProtocolEndpoint(file.partnerDid, false);
+    if (!protocolEndpoint) {
+      throw new Error('Could not resolve protocol endpoint for partner.');
     }
 
-    const data = await this.redline.downloadData(file.id, token);
-    this.startBrowserDownload(data, file.name || 'download');
+    const dataDestination: HttpDataAddress = {
+      type: 'HttpData',
+    };
+
+    const response = await (
+      await this.edcClientService.getClient()
+    ).management.transferProcesses.initiate({
+      counterPartyId: file.partnerDid,
+      counterPartyAddress: protocolEndpoint,
+      contractId: file.agreements[0].id,
+      transferType: 'HttpData-PUSH',
+      dataDestination,
+    });
+
+    return response.id;
   }
 
   async getFileTransferHistory(file: FileAsset): Promise<Transaction[]> {
@@ -34,20 +52,22 @@ export class TransferService {
       return [];
     }
 
-    const transfers = await this.redline.listTransferProcesses();
+    const transfers = await (
+      await this.edcClientService.getClient()
+    ).management.transferProcesses.queryAll();
     const history: Transaction[] = [];
 
     for (const agreement of file.agreements) {
       const related = transfers.filter(transfer => transfer.contractId === agreement.id);
       for (const transfer of related) {
         history.push({
-          id: transfer.correlationId ?? `${agreement.id}-${transfer.stateTimestamp ?? Date.now()}`,
+          id: transfer.correlationId ?? `${agreement.id}-${transfer.createdAt ?? Date.now()}`,
           partnerId: agreement.partnerId,
           partnerName: agreement.partnerName,
           type: transfer.type === 'CONSUMER' ? 'access' : 'share',
           status: (transfer.state ?? '').toUpperCase() === 'STARTED' ? 'success' : 'failed',
-          timestamp: transfer.stateTimestamp
-            ? new Date(transfer.stateTimestamp).toISOString()
+          timestamp: transfer.createdAt
+            ? new Date(transfer.createdAt).toISOString()
             : new Date().toISOString(),
         });
       }
@@ -63,35 +83,15 @@ export class TransferService {
 
     while (Date.now() - startedAt < maxWaitMs) {
       await this.delay(pollMs);
-      const transfer = await this.redline.getTransferProcess(transferProcessId);
+      const transfer = await (
+        await this.edcClientService.getClient()
+      ).management.transferProcesses.get(transferProcessId);
       if ((transfer.state ?? '').toUpperCase() === 'STARTED') {
         return transfer;
       }
     }
 
     throw new Error('Transfer process timed out before reaching STARTED.');
-  }
-
-  private getDownloadToken(transfer: TransferProcess): string | null {
-    const properties = transfer.contentDataAddress?.['properties'];
-    if (!properties || typeof properties !== 'object') {
-      return null;
-    }
-
-    const record = properties as Record<string, unknown>;
-    const token = record['https://w3id.org/edc/v0.0.1/ns/authorization'];
-    return typeof token === 'string' ? token : null;
-  }
-
-  private startBrowserDownload(data: Blob, filename: string): void {
-    const url = window.URL.createObjectURL(data);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(url);
   }
 
   private delay(ms: number): Promise<void> {

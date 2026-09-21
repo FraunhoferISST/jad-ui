@@ -1,4 +1,6 @@
-import { Constraint, Dataset } from './redline-data.model';
+import { Dataset } from '@think-it-labs/edc-connector-client';
+
+import { Constraint } from './redline-data.model';
 
 export interface FileAsset {
   id: string;

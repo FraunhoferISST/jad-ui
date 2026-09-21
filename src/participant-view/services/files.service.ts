@@ -29,7 +29,7 @@ export class FilesService {
 
     const catalogFiles = await this.catalog.getCatalogForAllPartners();
     const all = [...mappedLocal, ...catalogFiles];
-    // await this.catalog.matchContractsToFiles(all);
+    await this.catalog.matchContractsToFiles(all);
 
     const unique = new Map<string, FileAsset>();
     for (const file of all) {

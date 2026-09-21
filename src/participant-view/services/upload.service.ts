@@ -1,42 +1,21 @@
 import { inject, Injectable } from '@angular/core';
-import { EdcConfig } from '@eclipse-edc/dashboard-core';
+import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import {
     AssetInput,
     ContractDefinitionInput, CriterionInput,
-    EdcConnectorClient,
     EdcConnectorClientError,
     EdcConnectorClientErrorType,
-    EdcController,
     PolicyBuilder,
     PolicyDefinitionInput
 } from '@think-it-labs/edc-connector-client';
 
 import { AuthService } from '../../app/auth/auth.service';
-import { CelExpression } from '../models/redline-data.model';
 import { asString } from '../utils/cast.utils';
 import { PARTNER_ACCESS_EXPRESSION } from '../utils/policy.utils';
 import { FileSharingApiService } from './file-sharing-api.service';
 import { ParticipantConfigService } from './participant-config.service';
+import { ExtendedEdcClient } from '../models/edc.model';
 
-class CelExpressionsController extends EdcController {
-  async create(expressions: CelExpression[]): Promise<void> {
-    if (!this.context) {
-      throw new Error('No EDC context available while creating policy functions.');
-    }
-
-    for(const exp of expressions) {
-      exp['@context'] = ['https://w3id.org/edc/connector/management/v2'];
-      await this.inner.request(this.context.management, {
-        path: `/v5/celexpressions`,
-        method: 'POST',
-        authorization: this.context.authorization,
-        body: exp,
-      });
-    }
-  }
-}
-
-type UploadClient = EdcConnectorClient & { celExpressions: CelExpressionsController };
 
 interface UploadResourceIds {
   uploadMarker: string;
@@ -50,6 +29,7 @@ export class UploadService {
   private readonly auth = inject(AuthService);
   private readonly fileSharing = inject(FileSharingApiService);
   private readonly participantConfig = inject(ParticipantConfigService);
+  private readonly edcClientService = inject(EdcClientService);
 
   async uploadFile(
     file: File,
@@ -62,6 +42,7 @@ export class UploadService {
 
     const publicMetadata = {
       size: file.size,
+      type: file.type,
       assetId: ids.assetId,
       originalFilename: file.name,
       uploadMarker: ids.uploadMarker,
@@ -95,7 +76,7 @@ export class UploadService {
     } else {
     }
 
-    const client = this.createUploadClient();
+    const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
     let policyCreated = false;
     let assetCreated = false;
     let contractDefinitionCreated = false;
@@ -148,48 +129,7 @@ export class UploadService {
     };
   }
 
-  private createUploadClient(): UploadClient {
-    const config = this.resolveParticipantEdcConfig();
-    const builder = new EdcConnectorClient.Builder()
-      .managementUrl(config.managementUrl)
-      .defaultUrl(config.defaultUrl)
-      .protocolUrl(config.protocolUrl)
-      .managementApiVersion(config.managementApiVersion)
-      .use('celExpressions', CelExpressionsController);
-
-    if (config.protocolVersion) {
-      builder.protocolVersion(config.protocolVersion);
-    }
-    if (config.identityUrl) {
-      builder.identityUrl(config.identityUrl);
-    }
-    if (config.identityApiVersion) {
-      builder.identityApiVersion(config.identityApiVersion);
-    }
-    if (config.presentationUrl) {
-      builder.presentationUrl(config.presentationUrl);
-    }
-
-    const token = this.auth.session()?.token;
-    if (token) {
-      const key = config.authorization?.key ?? 'Authorization';
-      builder.authorization(key, `Bearer ${token}`);
-    } else if (config.authorization?.key && config.authorization.value) {
-      builder.authorization(config.authorization.key, config.authorization.value);
-    }
-
-    return builder.build() as UploadClient;
-  }
-
-  private resolveParticipantEdcConfig(): EdcConfig {
-    const config = this.auth.user()?.participantEdcConfig;
-    if (!config) {
-      throw new Error('Participant EDC connector config is unavailable for upload.');
-    }
-    return config;
-  }
-
-  private async ensurePartnerAccessExpression(client: UploadClient): Promise<void> {
+  private async ensurePartnerAccessExpression(client: ExtendedEdcClient): Promise<void> {
     try {
       await client.celExpressions.create([PARTNER_ACCESS_EXPRESSION]);
     } catch (error) {
@@ -265,10 +205,9 @@ export class UploadService {
       properties: {
         name: params.file.name,
         contenttype: params.file.type || 'application/octet-stream',
-        'edc:assetId': params.assetId,
-        'edc:fileId': params.fileId,
-        'edc:originalFilename': params.file.name,
-        'edc:size': String(params.file.size),
+        'fileId': params.fileId,
+        'originalFilename': params.file.name,
+        'size': String(params.file.size),
       },
       privateProperties: {
         partnerIds: params.partnerIds,
@@ -320,7 +259,7 @@ export class UploadService {
   }
 
   private async rollbackFailedUpload(
-    client: UploadClient,
+    client: ExtendedEdcClient,
     params: {
       fileId: string;
       assetId: string;
