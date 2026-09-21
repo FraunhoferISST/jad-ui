@@ -6,9 +6,4 @@ export const EXPLORE_ROUTES: Routes = [
     loadComponent: () =>
       import('./explore-list/explore-list.component').then(m => m.ExploreListComponent),
   },
-  {
-    path: ':id',
-    loadComponent: () =>
-      import('./explore-detail/explore-detail.component').then(m => m.ExploreDetailComponent),
-  },
 ];

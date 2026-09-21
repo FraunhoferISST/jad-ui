@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Component, EventEmitter, inject, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
@@ -15,13 +14,14 @@ import { formatFileSize } from '../../utils/format.utils';
   imports: [CommonModule],
   templateUrl: './explore-detail.component.html',
 })
-export class ExploreDetailComponent {
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
+export class ExploreDetailComponent implements OnChanges {
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly filesService = inject(FilesService);
   private readonly catalogService = inject(CatalogService);
   private readonly transferService = inject(TransferService);
+
+  @Input() fileId = '';
+  @Output() close = new EventEmitter<void>();
 
   readonly formatFileSize = formatFileSize;
 
@@ -30,16 +30,18 @@ export class ExploreDetailComponent {
   requestingAccess = false;
   requestingTransfer = false;
 
-  constructor() {
-    void this.load();
-  }
-
   hasAccess(file: FileAsset): boolean {
     return (file.agreements?.length ?? 0) > 0;
   }
 
-  back(): void {
-    void this.router.navigate(['/explore']);
+  closeDetails(): void {
+    this.close.emit();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['fileId'] && this.fileId) {
+      void this.load();
+    }
   }
 
   async requestAccess(): Promise<void> {
@@ -82,15 +84,14 @@ export class ExploreDetailComponent {
 
   private async load(): Promise<void> {
     this.loading = true;
-    const id = this.route.snapshot.paramMap.get('id');
-    if (!id) {
+    if (!this.fileId) {
       this.loading = false;
       return;
     }
 
     try {
       const files = await this.filesService.getFilesForExploreView();
-      this.file = files.find(item => item.id === id) ?? null;
+      this.file = files.find(item => item.id === this.fileId) ?? null;
     } catch (error) {
       this.file = null;
       this.showError(error, 'Failed to load file details');

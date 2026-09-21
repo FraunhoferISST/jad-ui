@@ -2,11 +2,9 @@ import { inject, Injectable } from '@angular/core';
 
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import {
-  ContractAgreement,
-  Dataset,
-  JsonLdService,
-  Offer,
-  PolicyBuilder,
+    ContractAgreement,
+    Dataset,
+    JsonLdService, PolicyBuilder
 } from '@think-it-labs/edc-connector-client';
 
 import { Agreement, FileAsset } from '../models/file-asset.model';
@@ -14,11 +12,7 @@ import { PartnerReference } from '../models/redline-data.model';
 import { resolveDidProtocolEndpoint } from '../utils/did.utils';
 import { PartnerService } from './partner.service';
 import { ExtendedEdcClient } from '../models/edc.model';
-import jsonld, { ContextDefinition } from 'jsonld';
-import dspace2025Data from "../models/contexts/dspace-2025.json";
-import edcDspaceData from "../models/contexts/edc-dspace.json";
-import odrlProfileData from "../models/contexts/odrl-profile.json";
-import managementV2Data from "../models/contexts/management-v2.json";
+import { ContextDefinition } from 'jsonld';
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
