@@ -80,6 +80,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'partners',
+        loadChildren: () =>
+          import('../participant-view/partners/partners.routes').then(
+            m => m.PARTNERS_ROUTES,
+          ),
+      },
+      {
         path: 'transfer-history',
         loadComponent: () =>
           import('@eclipse-edc/dashboard-core/transfer').then(m => m.TransferHistoryViewComponent),

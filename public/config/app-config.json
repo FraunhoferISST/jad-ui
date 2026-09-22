@@ -9,6 +9,13 @@
       "divider": true
     },
     {
+      "text": "Partners",
+      "materialSymbol": "groups",
+      "routerPath": "partners",
+      "viewDescription": "The partners view lets participants manage partner references for their dataspace, add new partners from registered participants, and inspect the currently configured partner list.",
+      "divider": true
+    },
+    {
       "text": "Files",
       "materialSymbol": "upload_file",
       "routerPath": "files",

@@ -1,0 +1,150 @@
+<div class="flex flex-col gap-6">
+  <div class="card bg-base-200 border border-base-300 shadow-xl">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="card-title">Partner management</h2>
+          <p class="text-sm text-base-content/70">
+            Add partner references from registered Redline participants. Remove is currently unavailable.
+          </p>
+        </div>
+        <button class="btn" type="button" [disabled]="loading" (click)="refresh()">
+          @if (loading) {
+            <span class="loading loading-spinner loading-xs"></span>
+            Refreshing
+          } @else {
+            <span class="material-symbols-rounded">refresh</span>
+            Refresh
+          }
+        </button>
+      </div>
+
+      <div class="card bg-base-100 border border-base-300">
+        <div class="card-body gap-3">
+          <h3 class="card-title text-base">Add partners</h3>
+          <p class="text-sm text-base-content/70">
+            Select one or more participants and add them as partner references.
+          </p>
+
+          <label class="input w-full">
+            <span class="material-symbols-rounded opacity-70">search</span>
+            <input
+              type="text"
+              [value]="participantSearch"
+              (input)="filterParticipants($any($event.target).value)"
+              placeholder="Search participants by tenant or identifier" />
+          </label>
+
+          <div class="max-h-72 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
+            @if (loading) {
+              <div class="flex items-center justify-center py-8">
+                <span class="loading loading-bars loading-lg text-primary"></span>
+              </div>
+            } @else {
+              @if (getFilteredParticipants().length > 0) {
+                @for (option of getFilteredParticipants(); track option.participantIdentifier) {
+                  <button
+                    class="btn btn-ghost mb-1 h-auto min-h-0 w-full justify-start py-2"
+                    type="button"
+                    (click)="toggleParticipantSelection(option.participantIdentifier)">
+                    <input
+                      class="checkbox checkbox-sm"
+                      type="checkbox"
+                      [checked]="isParticipantSelected(option.participantIdentifier)" />
+                    <span class="text-left">
+                      <span class="block text-sm">{{ option.participantIdentifier }}</span>
+                      <span class="block text-xs text-base-content/70">{{ option.tenantName }}</span>
+                    </span>
+                  </button>
+                }
+              } @else {
+                <p class="px-2 py-3 text-sm text-base-content/70">No available participants to add.</p>
+              }
+            }
+          </div>
+
+          <div class="rounded-box border border-base-300 bg-base-200 p-3">
+            @if (getSelectedParticipantLabels().length > 0) {
+              <p class="mb-2 text-sm font-medium">Selected</p>
+              <div class="flex flex-wrap gap-2">
+                @for (label of getSelectedParticipantLabels(); track label) {
+                  <span class="badge badge-soft">{{ label }}</span>
+                }
+              </div>
+            } @else {
+              <p class="text-sm text-base-content/70">No participants selected.</p>
+            }
+          </div>
+
+          <div class="card-actions justify-end gap-2">
+            <button class="btn btn-ghost" type="button" [disabled]="addingPartners" (click)="clearSelection()">
+              Clear
+            </button>
+            <button
+              class="btn btn-primary"
+              type="button"
+              [disabled]="addingPartners || getSelectedParticipantIds().length === 0"
+              (click)="addSelectedPartners()">
+              @if (addingPartners) {
+                <span class="loading loading-spinner loading-xs"></span>
+                Adding
+              } @else {
+                <span class="material-symbols-rounded">person_add</span>
+                Add selected
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-200 border border-base-300 shadow-xl">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h3 class="card-title">Current partners</h3>
+        <label class="input w-full max-w-xs">
+          <span class="material-symbols-rounded opacity-70">search</span>
+          <input
+            type="text"
+            [value]="partnerSearch"
+            (input)="filterPartners($any($event.target).value)"
+            placeholder="Filter partners" />
+        </label>
+      </div>
+
+      @if (loading) {
+        <div class="flex items-center justify-center py-8">
+          <span class="loading loading-bars loading-lg text-primary"></span>
+        </div>
+      } @else if (filteredPartners.length === 0) {
+        <div class="rounded-box border border-base-300 bg-base-100 p-8 text-center">
+          <span class="material-symbols-rounded text-3xl opacity-60">groups</span>
+          <p class="mt-2 font-medium">No partners found</p>
+          <p class="text-sm text-base-content/70">Try another filter or add partners above.</p>
+        </div>
+      } @else {
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          @for (partner of filteredPartners; track partner.identifier) {
+            <div class="card bg-base-100 border border-base-300">
+              <div class="card-body gap-3">
+                <h4 class="card-title text-base">{{ partner.nickname || partner.identifier }}</h4>
+                <div class="text-xs text-base-content/70 break-all">{{ partner.identifier }}</div>
+                <div class="card-actions justify-end">
+                  <button class="btn btn-sm" type="button" (click)="showRemoveUnsupported()">
+                    <span class="material-symbols-rounded">person_remove</span>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (!loading) {
+        <p class="text-sm text-base-content/70">{{ filteredPartners.length }} partner(s) shown</p>
+      }
+    </div>
+  </div>
+</div>

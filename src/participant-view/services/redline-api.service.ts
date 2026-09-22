@@ -5,7 +5,9 @@ import { firstValueFrom } from 'rxjs';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
 import {
   DataspaceResource,
+  PartnerReferenceRequest,
   PartnerReference,
+  TenantResource,
 } from '../models/redline-data.model';
 import { ParticipantContextService } from './participant-context.service';
 
@@ -34,6 +36,32 @@ export class RedlineApiService {
     const response = await firstValueFrom(
       this.http.get<PartnerReference[] | PartnerReference>(
         `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
+      ),
+    );
+
+    return Array.isArray(response) ? response : response ? [response] : [];
+  }
+
+  async createPartner(
+    dataspaceId: number,
+    partner: PartnerReferenceRequest,
+  ): Promise<PartnerReference> {
+    const context = await this.contextService.resolve();
+
+    return firstValueFrom(
+      this.http.post<PartnerReference>(
+        `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
+        partner,
+      ),
+    );
+  }
+
+  async getTenants(serviceProviderId?: number): Promise<TenantResource[]> {
+    const context = await this.contextService.resolve();
+    const providerId = serviceProviderId ?? context.providerId;
+    const response = await firstValueFrom(
+      this.http.get<TenantResource[] | TenantResource>(
+        `${this.apiUrl}/service-providers/${providerId}/tenants`,
       ),
     );
 
