@@ -88,7 +88,6 @@ export class FilesService {
       uploadedAt,
       size: asNumber(metadata['size']) ?? file.contentLength ?? 0,
       origin: (asString(metadata['origin']) as 'owned' | 'remote' | undefined) ?? 'owned',
-      assetId: asString(metadata['assetId']),
       accessRestrictions: partnerIds.map(partnerId => ({
         partnerId,
         partnerName: partnerNamesById.get(partnerId) ?? '',

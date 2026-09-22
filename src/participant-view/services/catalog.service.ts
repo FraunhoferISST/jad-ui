@@ -7,7 +7,7 @@ import {
     JsonLdService, PolicyBuilder
 } from '@think-it-labs/edc-connector-client';
 
-import { Agreement, FileAsset } from '../models/file-asset.model';
+import { FileAsset } from '../models/file-asset.model';
 import { PartnerReference } from '../models/redline-data.model';
 import { resolveDidProtocolEndpoint } from '../utils/did.utils';
 import { PartnerService } from './partner.service';
@@ -52,7 +52,7 @@ export class CatalogService {
         name: dataset.mandatoryValue('edc', 'name'),
         origin: 'remote',
         uploadedAt: dataset.optionalValue('edc', 'name'),
-        assetId: dataset.mandatoryValue('edc', 'assetId'),
+        assetId: dataset['@id'],
         size: dataset.optionalValue('edc', 'size'),
         type: dataset.optionalValue('edc', 'contenttype'),
         partnerDid: catalog.participantId,
@@ -79,14 +79,9 @@ export class CatalogService {
 
       const matchingFiles = files.filter(file => file.assetId === agreement.assetId);
       for (const file of matchingFiles) {
-        const converted = this.toAgreement(agreement, partnerNames);
-        if (!converted) {
-          continue;
-        }
-
-        file.agreements = [...(file.agreements ?? []), converted];
-        if (file.uploadedAt === 'N/A' && converted.createdAt) {
-          file.uploadedAt = converted.createdAt;
+        file.agreements = [...(file.agreements ?? []), agreement];
+        if (file.uploadedAt === 'N/A' && agreement.contractSigningDate) {
+          file.uploadedAt = agreement.contractSigningDate;
         }
       }
     }
@@ -97,26 +92,6 @@ export class CatalogService {
   private async listAgreements(): Promise<ContractAgreement[]> {
     const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
     return client.v5contractAgreements.queryAll({"@type": 'QuerySpec'});
-  }
-
-  private toAgreement(
-    agreement: ContractAgreement,
-    partnerNames: Map<string, string>,
-  ): Agreement | null {
-    const agreementId = agreement['agreementId'];
-    if (!agreementId || !agreement.providerId) {
-      return null;
-    }
-
-    return {
-      id: agreementId,
-      partnerId: agreement.providerId,
-      partnerName: partnerNames.get(agreement.providerId) ?? agreement.providerId,
-      status: 'Active',
-      createdAt: agreement.contractSigningDate
-        ? new Date(agreement.contractSigningDate).toISOString()
-        : '',
-    };
   }
 
   async requestAccess(file: FileAsset): Promise<void> {

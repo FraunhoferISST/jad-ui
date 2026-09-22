@@ -2,16 +2,17 @@ import { inject, Injectable } from '@angular/core';
 
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import {
-  HttpDataAddress,
-  TransferProcess,
+    TransferProcess
 } from '@think-it-labs/edc-connector-client';
 
 import { FileAsset, Transaction } from '../models/file-asset.model';
 import { resolveDidProtocolEndpoint } from '../utils/did.utils';
+import { PartnerService } from './partner.service';
 
 @Injectable({ providedIn: 'root' })
 export class TransferService {
   private readonly edcClientService = inject(EdcClientService);
+  private readonly partnerService = inject(PartnerService);
 
   async requestTransferAndDownload(file: FileAsset): Promise<void> {
     const transferProcess = await this.requestTransfer(file);
@@ -21,7 +22,7 @@ export class TransferService {
   }
 
   async requestTransfer(file: FileAsset): Promise<string> {
-    if (!file.agreements?.[0]?.id || !file.partnerDid) {
+    if (!file.agreements?.[0]?.['@id']|| !file.partnerDid) {
       throw new Error('Missing file data required for transfer and download.');
     }
 
@@ -30,18 +31,13 @@ export class TransferService {
       throw new Error('Could not resolve protocol endpoint for partner.');
     }
 
-    const dataDestination: HttpDataAddress = {
-      type: 'HttpData',
-    };
-
     const response = await (
       await this.edcClientService.getClient()
     ).management.transferProcesses.initiate({
       counterPartyId: file.partnerDid,
       counterPartyAddress: protocolEndpoint,
-      contractId: file.agreements[0].id,
-      transferType: 'HttpData-PUSH',
-      dataDestination,
+      contractId: file.agreements[0]['@id'],
+      transferType: 'HttpData-PULL',
     });
 
     return response.id;
@@ -59,11 +55,12 @@ export class TransferService {
 
     for (const agreement of file.agreements) {
       const related = transfers.filter(transfer => transfer.contractId === agreement.id);
+      const partnerName = (await this.partnerService.getPartners()).filter(partner => partner.identifier === agreement.providerId).at(0)?.nickname;
       for (const transfer of related) {
         history.push({
           id: transfer.correlationId ?? `${agreement.id}-${transfer.createdAt ?? Date.now()}`,
-          partnerId: agreement.partnerId,
-          partnerName: agreement.partnerName,
+          partnerId: agreement.providerId,
+          partnerName: partnerName ?? 'unknown',
           type: transfer.type === 'CONSUMER' ? 'access' : 'share',
           status: (transfer.state ?? '').toUpperCase() === 'STARTED' ? 'success' : 'failed',
           timestamp: transfer.createdAt

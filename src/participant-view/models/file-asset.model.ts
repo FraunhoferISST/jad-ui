@@ -1,18 +1,17 @@
-import { Dataset } from '@think-it-labs/edc-connector-client';
+import { Dataset, ContractAgreement } from '@think-it-labs/edc-connector-client';
 
-import { Constraint } from './redline-data.model';
 
 export interface FileAsset {
   id: string;
   name: string;
   description?: string;
   origin: 'owned' | 'remote';
-  uploadedAt: string;
-  updatedAt?: string;
+  uploadedAt: string | number;
+  updatedAt?: string | number;
   size?: number;
   type?: string;
   accessRestrictions?: AccessRestriction[];
-  agreements?: Agreement[];
+  agreements?: ContractAgreement[];
   transactionHistory?: Transaction[];
   partnerName?: string;
   catalogDataset?: Dataset;
@@ -25,16 +24,6 @@ export interface AccessRestriction {
   partnerName?: string;
   policy?: string;
   contractId?: string;
-}
-
-export interface Agreement {
-  id: string;
-  partnerId: string;
-  partnerName: string;
-  status: string;
-  createdAt: string;
-  expiresAt?: string;
-  permissions?: Constraint[];
 }
 
 export interface Transaction {
