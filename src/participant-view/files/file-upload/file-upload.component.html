@@ -30,13 +30,13 @@
         <p class="fieldset-label">Max size per file: {{ formatFileSize(maxFileSize) }}</p>
 
         @if (selectedFiles.length > 0) {
-          <ul class="list rounded-box border border-base-300 bg-base-100">
+          <ul class="list w-full max-w-full rounded-box border border-base-300 bg-base-100">
             @for (file of selectedFiles; track file.name) {
-              <li class="list-row">
+              <li class="list-row min-w-0">
                 <span class="material-symbols-rounded opacity-70">description</span>
-                <div class="list-col-grow">
-                  <div>{{ file.name }}</div>
-                  <div class="text-xs text-base-content/70">{{ file.type || 'unknown type' }}</div>
+                <div class="list-col-grow min-w-0">
+                  <div class="break-all whitespace-normal">{{ file.name }}</div>
+                  <div class="break-all whitespace-normal text-xs text-base-content/70">{{ file.type || 'unknown type' }}</div>
                 </div>
                 <span class="badge badge-ghost">{{ formatFileSize(file.size) }}</span>
               </li>
@@ -55,46 +55,29 @@
           <span>If no partner is selected, all ecosystem members can discover this file.</span>
         </div>
 
-        <div class="relative mt-3">
-          <button #partnerTrigger type="button" class="btn w-full justify-between" (click)="togglePartnerDropdown()">
-            @if (getSelectedPartnerLabels().length > 0) {
-              <span class="truncate">{{ getSelectedPartnerLabels().join(', ') }}</span>
-            } @else {
-              <span class="text-base-content/60">Select partners (optional)</span>
-            }
-            <span class="material-symbols-rounded">expand_more</span>
-          </button>
-
-          @if (isPartnerDropdownOpen) {
-            <div
-              #partnerDropdown
-              class="absolute z-20 mt-2 w-full rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
-              <label class="input mb-2 w-full">
-                <span class="material-symbols-rounded opacity-70">search</span>
-                <input
-                  type="text"
-                  [value]="partnerSearch"
-                  (input)="updatePartnerSearch($any($event.target).value)"
-                  placeholder="Search partners" />
-              </label>
-
-              <div class="max-h-60 overflow-y-auto">
-                @for (partner of getFilteredPartners(); track partner.identifier) {
-                  <button
-                    class="btn btn-ghost mb-1 w-full justify-start"
-                    type="button"
-                    (click)="togglePartnerSelection(partner.identifier)">
-                    <input class="checkbox checkbox-sm" type="checkbox" [checked]="isPartnerSelected(partner.identifier)" />
-                    <span class="truncate">{{ partner.nickname || partner.identifier }}</span>
-                  </button>
-                }
-                @if (getFilteredPartners().length === 0) {
-                  <p class="px-2 py-3 text-sm text-base-content/70">No partner matches your search.</p>
-                }
-              </div>
+        <div class="mt-3 rounded-box border border-base-300 bg-base-100 p-3">
+          @if (getSelectedPartnerLabels().length > 0) {
+            <p class="mb-2 text-sm font-medium">Selected partners</p>
+            <div class="flex flex-wrap gap-2 max-w-full">
+              @for (label of getSelectedPartnerLabels(); track label) {
+                <span class="badge badge-soft max-w-full whitespace-normal break-all text-left">
+                  {{ label }}
+                </span>
+              }
             </div>
+          } @else {
+            <p class="text-sm text-base-content/70">No partners selected.</p>
           }
         </div>
+
+        <lib-multiselect-with-search
+          class="mt-3 block w-full"
+          [items]="partners"
+          [preSelectedItems]="getSelectedPartners()"
+          [displayFn]="partnerDisplayFn"
+          [maxHeight]="240"
+          (selectedItemsChange)="onPartnerSelectionChange($event)">
+        </lib-multiselect-with-search>
       </fieldset>
     }
 

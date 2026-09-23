@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, EventEmitter, HostListener, inject, Output, ViewChild } from '@angular/core';
+import { Component, EventEmitter, inject, Output } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
+import { ModalAndAlertService, MultiselectWithSearchComponent } from '@eclipse-edc/dashboard-core';
 
 import { PartnerReference } from '../../models/redline-data.model';
 import { ParticipantConfigService } from '../../services/participant-config.service';
@@ -12,7 +12,7 @@ import { formatFileSize } from '../../utils/format.utils';
 @Component({
   selector: 'participant-file-upload',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, MultiselectWithSearchComponent],
   templateUrl: './file-upload.component.html',
 })
 export class FileUploadComponent {
@@ -22,13 +22,12 @@ export class FileUploadComponent {
   private readonly uploadService = inject(UploadService);
   private readonly configService = inject(ParticipantConfigService);
 
-  @ViewChild('partnerDropdown') partnerDropdown?: ElementRef<HTMLElement>;
-  @ViewChild('partnerTrigger') partnerTrigger?: ElementRef<HTMLElement>;
-
   @Output() cancel = new EventEmitter<void>();
   @Output() uploaded = new EventEmitter<number>();
 
   readonly formatFileSize = formatFileSize;
+  readonly partnerDisplayFn = (partner: PartnerReference): string =>
+    partner.nickname || partner.identifier;
 
   readonly form = this.fb.nonNullable.group({
     partnerIds: [[] as string[]],
@@ -46,8 +45,6 @@ export class FileUploadComponent {
 
   uploading = false;
   loading = true;
-  partnerSearch = '';
-  isPartnerDropdownOpen = false;
   maxFileSize = 10 * 1024 * 1024;
   allowedFileTypes: string[] = [];
 
@@ -59,22 +56,6 @@ export class FileUploadComponent {
 
   constructor() {
     void this.loadData();
-  }
-
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
-    if (!this.isPartnerDropdownOpen) {
-      return;
-    }
-    const target = event.target as Node | null;
-    if (
-      target &&
-      (this.partnerDropdown?.nativeElement.contains(target) ||
-        this.partnerTrigger?.nativeElement.contains(target))
-    ) {
-      return;
-    }
-    this.isPartnerDropdownOpen = false;
   }
 
   onFileSelected(event: Event): void {
@@ -179,42 +160,19 @@ export class FileUploadComponent {
     this.cancel.emit();
   }
 
-  togglePartnerDropdown(): void {
-    this.isPartnerDropdownOpen = !this.isPartnerDropdownOpen;
-  }
-
-  updatePartnerSearch(value: string): void {
-    this.partnerSearch = value;
-  }
-
-  getFilteredPartners(): PartnerReference[] {
-    const query = this.partnerSearch.trim().toLowerCase();
-    if (!query) {
-      return this.partners;
-    }
-
-    return this.partners.filter(partner => {
-      const nickname = (partner.nickname ?? '').toLowerCase();
-      const identifier = (partner.identifier ?? '').toLowerCase();
-      return nickname.includes(query) || identifier.includes(query);
-    });
-  }
-
   getSelectedPartnerIds(): string[] {
     return this.form.controls.partnerIds.value;
   }
 
-  isPartnerSelected(partnerId: string): boolean {
-    return this.getSelectedPartnerIds().includes(partnerId);
+  getSelectedPartners(): PartnerReference[] {
+    const selectedIds = this.getSelectedPartnerIds();
+    return this.partners.filter(partner => selectedIds.includes(partner.identifier));
   }
 
-  togglePartnerSelection(partnerId: string): void {
-    const current = this.getSelectedPartnerIds();
-    const next = current.includes(partnerId)
-      ? current.filter(id => id !== partnerId)
-      : [...current, partnerId];
-
-    this.form.patchValue({ partnerIds: next });
+  onPartnerSelectionChange(selectedPartners: PartnerReference[]): void {
+    this.form.patchValue({
+      partnerIds: selectedPartners.map(partner => partner.identifier),
+    });
   }
 
   getSelectedPartnerLabels(): string[] {
