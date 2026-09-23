@@ -1,0 +1,474 @@
+#!/usr/bin/env python3
+"""
+keycloakagent
+
+Syncs Redline participants into Keycloak participant users by polling the
+Redline UI API on a fixed interval (instead of reacting to NATS events).
+
+For every participant discovered in Redline it:
+
+  1. walks the Redline UI API (service-providers -> tenants -> participants)
+     to collect each participant's DID and the tenant (friendly) name,
+  2. resolves the participant's `did:web` DID document and reads the
+     ProtocolEndpoint service to derive the DSP protocol URL and the
+     participant context id,
+  3. upserts the jwtlet mapping for the EDC proxy service account
+     (mandatory: it grants the proxy its participant-scoped tokens),
+  4. creates or updates the Keycloak participant user with its connector
+     config (DID, protocol URL, management URL) and the `participant` role.
+
+Only create/update is performed; users absent from Redline are never removed.
+
+Configuration is supplied through environment variables; see Config below.
+"""
+import json
+import logging
+import os
+import re
+import sys
+import time
+from urllib.parse import urlencode, quote
+
+import requests
+
+log = logging.getLogger("keycloakagent")
+
+
+class Config:
+    """Reads all settings from environment variables, with sensible defaults."""
+
+    def __init__(self):
+        # Redline UI API
+        self.redline_url = os.environ.get(
+            "REDLINE_URL", "http://redline.edc-v.svc:8081"
+        )
+        self.redline_poll_interval = float(
+            os.environ.get("REDLINE_POLL_INTERVAL", "60")
+        )
+
+        # jwtlet
+        self.jwtlet_management_url = os.environ.get(
+            "JWTLET_MANAGEMENT_URL", "http://jwtlet.edc-v.svc:8081"
+        )
+        self.jwtlet_token_file = os.environ.get(
+            "JWTLET_TOKEN_FILE", "/var/run/secrets/jwtlet/token"
+        )
+        self.jwtlet_audience = os.environ.get("JWTLET_AUDIENCE", "edcv")
+        self.jwtlet_namespace = os.environ.get("JWTLET_NAMESPACE", "edc-v")
+        self.jwtlet_edc_proxy_sa = os.environ.get(
+            "JWTLET_EDC_PROXY_SA", "edc-administration-api-client"
+        )
+        self.jwtlet_source_client_identifier = os.environ.get(
+            "JWTLET_SOURCE_CLIENT_IDENTIFIER",
+            f"system:serviceaccount:{self.jwtlet_namespace}:controlplane",
+        )
+        self.jwtlet_target_client_identifier = os.environ.get(
+            "JWTLET_TARGET_CLIENT_IDENTIFIER",
+            f"system:serviceaccount:{self.jwtlet_namespace}:{self.jwtlet_edc_proxy_sa}",
+        )
+        self.jwtlet_scopes = json.loads(
+            os.environ.get("JWTLET_SCOPES", '["write","read","management-api:admin"]')
+        )
+        self.jwtlet_audiences = json.loads(
+            os.environ.get("JWTLET_AUDIENCES", '["edcv"]')
+        )
+
+        # Keycloak
+        self.keycloak_base_url = os.environ.get(
+            "KEYCLOAK_BASE_URL", "http://keycloak.edc-v.svc:8080"
+        )
+        self.keycloak_realm = os.environ.get("KEYCLOAK_REALM", "jad-dev")
+        self.keycloak_admin_realm = os.environ.get("KEYCLOAK_ADMIN_REALM", "master")
+        self.keycloak_admin_client_id = os.environ.get(
+            "KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli"
+        )
+        self.keycloak_admin_username = os.environ.get(
+            "KEYCLOAK_ADMIN_USERNAME", "admin"
+        )
+        self.keycloak_admin_password = os.environ.get(
+            "KEYCLOAK_ADMIN_PASSWORD", "admin-dev-change-me"
+        )
+        self.keycloak_participant_role = os.environ.get(
+            "KEYCLOAK_PARTICIPANT_ROLE", "participant"
+        )
+
+        # EDC proxy / JAD
+        self.edc_proxy_base_url = os.environ.get(
+            "EDC_PROXY_BASE_URL", "http://edc-proxy.localhost/proxy"
+        )
+        self.jad_base_url = os.environ.get("JAD_BASE_URL", "http://jad.localhost")
+
+
+CONFIG = Config()
+
+
+def _http():
+    session = requests.Session()
+    session.trust_env = False
+    return session
+
+
+def _keycloak_admin_url(path):
+    return f"{CONFIG.keycloak_base_url}/admin/realms/{CONFIG.keycloak_realm}{path}"
+
+
+def _bearer(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+# ---------------------------------------------------------------------------
+# Redline UI API
+# ---------------------------------------------------------------------------
+
+def get_service_providers(session):
+    resp = session.get(
+        CONFIG.redline_url.rstrip("/") + "/api/ui/service-providers", timeout=30
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_tenants(session, service_provider_id):
+    resp = session.get(
+        f"{CONFIG.redline_url.rstrip('/')}/api/ui/service-providers/"
+        f"{service_provider_id}/tenants",
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def list_redline_participants(session):
+    """Walk Redline SPs -> tenants -> participants.
+
+    Returns a list of dicts: {did, tenant_name}.
+    """
+    participants = []
+    for sp in get_service_providers(session):
+        sp_id = sp.get("id")
+        if sp_id is None:
+            continue
+        for tenant in get_tenants(session, sp_id):
+            tenant_name = tenant.get("name") or ""
+            for participant in tenant.get("participants") or []:
+                did = participant.get("identifier")
+                if not did:
+                    continue
+                participants.append({"did": did, "tenant_name": tenant_name})
+    return participants
+
+
+# ---------------------------------------------------------------------------
+# DID resolution
+# ---------------------------------------------------------------------------
+
+def resolve_did_document(session, did):
+    """Resolve a `did:web` DID and return its parsed JSON document.
+
+    For a DID like `did:web:identity.jad.localhost:demo-provider` the document
+    is fetched from `http://identity.jad.localhost/demo-provider/.well-known/did.json`.
+    """
+    if not did.startswith("did:web:"):
+        raise ValueError(f"not a web DID: {did}")
+    remainder = did[len("did:web:"):]
+    if ":" in remainder:
+        host, _, slug = remainder.partition(":")
+    else:
+        host, slug = remainder, ""
+    url = f"http://{host}/{slug}/.well-known/did.json" if slug else (
+        f"http://{host}/.well-known/did.json"
+    )
+    resp = session.get(url, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def extract_protocol_endpoint(did_document):
+    for service in did_document.get("service") or []:
+        if (service.get("type") or "").lower() == "protocolendpoint":
+            endpoint = service.get("serviceEndpoint")
+            if endpoint:
+                return endpoint
+    return None
+
+
+_PCID_RE = re.compile(r"/api/dsp/([^/]+)/")
+
+
+def extract_participant_context_id(protocol_url):
+    m = _PCID_RE.search(protocol_url or "")
+    if not m:
+        raise ValueError(f"cannot extract participant context id from {protocol_url}")
+    return m.group(1)
+
+
+def did_connector_name(did):
+    """Trailing segment of the DID (e.g. `demo-provider`) -> username / connector name."""
+    return did.split(":")[-1]
+
+
+# ---------------------------------------------------------------------------
+# jwtlet
+# ---------------------------------------------------------------------------
+
+def read_subject_token():
+    with open(CONFIG.jwtlet_token_file, "r") as fh:
+        token = fh.read().strip()
+    if not token:
+        raise RuntimeError(f"empty subject token at {CONFIG.jwtlet_token_file}")
+    return token
+
+
+def upsert_jwtlet_mapping(session, subject_token, participant_context_id):
+    base = CONFIG.jwtlet_management_url.rstrip("/") + "/api/v1/mappings"
+    headers = _bearer(subject_token)
+    payload = {
+        "clientIdentifier": CONFIG.jwtlet_target_client_identifier,
+        "participantContext": participant_context_id,
+        "scopes": CONFIG.jwtlet_scopes,
+        "audiences": CONFIG.jwtlet_audiences,
+    }
+
+    create = session.post(base, headers=headers, json=payload, timeout=30)
+    if create.status_code in (200, 201):
+        log.info("created jwtlet mapping for %s (%s)",
+                 CONFIG.jwtlet_target_client_identifier, participant_context_id)
+        return
+
+    enc_client = quote(CONFIG.jwtlet_target_client_identifier, safe="")
+    enc_participant = quote(participant_context_id, safe="")
+    update = session.put(
+        f"{base}/{enc_client}/{enc_participant}",
+        headers=headers,
+        json=payload,
+        timeout=30,
+    )
+    if update.status_code in (200, 204):
+        log.info("updated jwtlet mapping for %s (%s)",
+                 CONFIG.jwtlet_target_client_identifier, participant_context_id)
+        return
+
+    log.warning(
+        "failed to upsert jwtlet mapping for %s (%s): create=%s update=%s",
+        CONFIG.jwtlet_target_client_identifier,
+        participant_context_id,
+        create.status_code,
+        update.status_code,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Keycloak
+# ---------------------------------------------------------------------------
+
+def get_keycloak_admin_token(session):
+    url = (
+        f"{CONFIG.keycloak_base_url}/realms/{CONFIG.keycloak_admin_realm}"
+        "/protocol/openid-connect/token"
+    )
+    form = {
+        "client_id": CONFIG.keycloak_admin_client_id,
+        "username": CONFIG.keycloak_admin_username,
+        "password": CONFIG.keycloak_admin_password,
+        "grant_type": "password",
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    resp = session.post(url, data=urlencode(form), headers=headers, timeout=30)
+    resp.raise_for_status()
+    token = resp.json().get("access_token")
+    if not token:
+        raise RuntimeError(f"no access_token from Keycloak at {url}")
+    return token
+
+
+def get_participant_role(session, admin_token):
+    url = _keycloak_admin_url(f"/roles/{CONFIG.keycloak_participant_role}")
+    resp = session.get(url, headers=_bearer(admin_token), timeout=30)
+    resp.raise_for_status()
+    role = resp.json()
+    if role.get("name") != CONFIG.keycloak_participant_role:
+        raise RuntimeError(
+            f"role '{CONFIG.keycloak_participant_role}' not resolvable in "
+            f"realm '{CONFIG.keycloak_realm}'"
+        )
+    return role
+
+
+def find_user(session, admin_token, username):
+    resp = session.get(
+        _keycloak_admin_url("/users"),
+        headers=_bearer(admin_token),
+        params={"username": username, "exact": "true"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    users = resp.json()
+    return users[0]["id"] if users else None
+
+
+def build_connector_config(participant_context_id, did, dsp, connector_name):
+    return {
+        "connectorName": connector_name,
+        "managementUrl": f"{CONFIG.edc_proxy_base_url}/controlplane",
+        "managementApiVersion": f"v5/participants/{participant_context_id}",
+        "defaultUrl": f"{CONFIG.jad_base_url}/api/management/health",
+        "protocolUrl": dsp,
+        "protocolVersion": "http-dsp-profile-2025-1",
+        "did": did,
+    }
+
+
+def sync_keycloak_user(
+    session, admin_token, role, participant_context_id, did, dsp, friendly_name
+):
+    connector_name = did_connector_name(did)
+    username = connector_name
+    password = connector_name
+    participant_email = f"{connector_name}@participants.jad.local"
+
+    connector_config = build_connector_config(
+        participant_context_id, did, dsp, connector_name
+    )
+    connector_config_json = json.dumps(connector_config, separators=(",", ":"))
+
+    users_url = _keycloak_admin_url("/users")
+    headers_json = {**_bearer(admin_token), "Content-Type": "application/json"}
+
+    def user_payload(with_credentials):
+        payload = {
+            "username": username,
+            "enabled": True,
+            "emailVerified": True,
+            "email": participant_email,
+            "firstName": friendly_name or "Participant",
+            "lastName": username,
+            "attributes": {
+                "participant_context_id": [participant_context_id],
+                "friendly_name": [friendly_name] if friendly_name else [],
+                "edc_connector_config": [connector_config_json],
+            },
+        }
+        if with_credentials:
+            payload["credentials"] = [
+                {
+                    "type": "password",
+                    "value": password,
+                    "temporary": False,
+                }
+            ]
+        return payload
+
+    user_id = find_user(session, admin_token, username)
+
+    if user_id is None:
+        resp = session.post(users_url, headers=headers_json,
+                            json=user_payload(True), timeout=30)
+        if resp.status_code != 201:
+            raise RuntimeError(
+                f"failed to create user {username}: status {resp.status_code}"
+            )
+        location = resp.headers.get("Location", "")
+        user_id = location.rstrip("/").split("/")[-1]
+        log.info("created participant user %s (%s)", username, participant_context_id)
+    else:
+        resp = session.put(
+            f"{users_url}/{user_id}", headers=headers_json,
+            json=user_payload(True), timeout=30,
+        )
+        if resp.status_code != 204:
+            raise RuntimeError(
+                f"failed to update user {username}: status {resp.status_code}"
+            )
+        log.info("updated participant user %s (%s)", username, participant_context_id)
+
+    # Persist attributes separately so they are not overwritten by credentials.
+    attr_resp = session.put(
+        f"{users_url}/{user_id}", headers=headers_json,
+        json=user_payload(False), timeout=30,
+    )
+    if attr_resp.status_code != 204:
+        raise RuntimeError(
+            f"failed to persist attributes for {username}: "
+            f"status {attr_resp.status_code}"
+        )
+
+    role_resp = session.post(
+        f"{users_url}/{user_id}/role-mappings/realm",
+        headers=headers_json,
+        json=[role],
+        timeout=30,
+    )
+    if role_resp.status_code != 204:
+        log.warning(
+            "failed to assign role '%s' to %s: status %s",
+            CONFIG.keycloak_participant_role, username, role_resp.status_code,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sync
+# ---------------------------------------------------------------------------
+
+def sync_once(session):
+    subject_token = read_subject_token()
+    admin_token = get_keycloak_admin_token(session)
+    role = get_participant_role(session, admin_token)
+
+    participants = list_redline_participants(session)
+    if not participants:
+        log.info("no participants found in Redline")
+        return
+
+    for p in participants:
+        did = p["did"]
+        friendly_name = p["tenant_name"]
+        try:
+            doc = resolve_did_document(session, did)
+        except Exception:
+            log.warning("skipping participant %s: DID document not resolvable", did)
+            continue
+        try:
+            dsp = extract_protocol_endpoint(doc)
+            if not dsp:
+                log.warning("no ProtocolEndpoint in DID document for %s", did)
+                continue
+            participant_context_id = extract_participant_context_id(dsp)
+            log.info(
+                "processing participant did=%s ctx=%s friendly=%s",
+                did, participant_context_id, friendly_name,
+            )
+
+            upsert_jwtlet_mapping(session, subject_token, participant_context_id)
+            sync_keycloak_user(
+                session, admin_token, role,
+                participant_context_id, did, dsp, friendly_name,
+            )
+        except Exception:
+            log.exception("failed to process participant %s", did)
+
+
+def main():
+    logging.basicConfig(
+        level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper()),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    log.info(
+        "keycloakagent polling Redline at %s every %ss",
+        CONFIG.redline_url, CONFIG.redline_poll_interval,
+    )
+
+    while True:
+        session = _http()
+        try:
+            sync_once(session)
+        except Exception:
+            log.exception("sync pass failed")
+        session.close()
+        time.sleep(CONFIG.redline_poll_interval)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)

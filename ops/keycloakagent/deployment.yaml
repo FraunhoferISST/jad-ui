@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloakagent
+  namespace: edc-v
+  labels:
+    app: keycloakagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloakagent
+  template:
+    metadata:
+      labels:
+        app: keycloakagent
+    spec:
+      serviceAccountName: cfm-agents
+      containers:
+        - name: keycloakagent
+          image: python:3.12-slim
+          command: ["sh", "-ec"]
+          args:
+            - |
+              pip install --no-cache-dir -r /app/requirements.txt
+              exec python /app/agent.py
+          envFrom:
+            - secretRef:
+                name: keycloakagent-admin
+          env:
+            - name: REDLINE_URL
+              value: http://redline.edc-v.svc:8081
+            - name: REDLINE_POLL_INTERVAL
+              value: "60"
+            - name: JWTLET_MANAGEMENT_URL
+              value: http://jwtlet.edc-v.svc:8081
+            - name: JWTLET_TOKEN_EXCHANGE_URL
+              value: http://jwtlet.edc-v.svc:8080
+            - name: JWTLET_TOKEN_FILE
+              value: /var/run/secrets/jwtlet/token
+            - name: JWTLET_AUDIENCE
+              value: edcv
+            - name: JWTLET_NAMESPACE
+              value: edc-v
+            - name: JWTLET_EDC_PROXY_SA
+              value: edc-administration-api-client
+            - name: KEYCLOAK_BASE_URL
+              value: http://keycloak.edc-v.svc:80
+            - name: KEYCLOAK_REALM
+              value: jad-dev
+            - name: KEYCLOAK_ADMIN_REALM
+              value: master
+            - name: KEYCLOAK_ADMIN_CLIENT_ID
+              value: admin-cli
+            - name: KEYCLOAK_PARTICIPANT_ROLE
+              value: participant
+            - name: EDC_PROXY_BASE_URL
+              value: http://edc-proxy.localhost/proxy
+            - name: JAD_BASE_URL
+              value: http://jad.localhost
+          volumeMounts:
+            - name: agent-config
+              mountPath: /app
+              readOnly: true
+            - name: jwtlet-subject-token
+              mountPath: /var/run/secrets/jwtlet
+              readOnly: true
+      volumes:
+        - name: jwtlet-subject-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc.cluster.local
+                  expirationSeconds: 3600
+        - name: agent-config
+          configMap:
+            name: keycloakagent-config

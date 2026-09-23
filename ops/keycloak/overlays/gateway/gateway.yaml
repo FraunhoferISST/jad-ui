@@ -2,7 +2,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: keycloak-gateway
-  namespace: jad-auth
+  namespace: edc-v
 spec:
   gatewayClassName: traefik
   listeners:

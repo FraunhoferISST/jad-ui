@@ -10,7 +10,7 @@ import { RedlineConfig } from './models/redline.models';
  */
 const DEFAULT_REDLINE_CONFIG: RedlineConfig = {
   baseUrl: 'http://localhost:8081',
-  didPrefix: 'did:web:identityhub%3A7083:',
+  didPrefix: 'did:web:identity.jad.localhost:',
 };
 
 /**

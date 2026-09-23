@@ -73,13 +73,13 @@
                 } @else {
                   @for (agreement of file.agreements; track agreement.id) {
                     <tr>
-                      <td>{{ agreement.partnerName }}</td>
-                      <td>
-                        <span class="badge" [class.badge-success]="agreement.status.toUpperCase() === 'ACTIVE'" [class.badge-warning]="agreement.status.toUpperCase() !== 'ACTIVE'">
-                          {{ agreement.status }}
-                        </span>
-                      </td>
-                      <td>{{ agreement.createdAt ? (agreement.createdAt | date: DATE_FORMATS.dateWithTime) : 'N/A' }}</td>
+                      <td>{{ agreement.providerId }}</td>
+                      <!-- <td> -->
+                      <!--   <span class="badge" [class.badge-success]="agreement.status.toUpperCase() === 'ACTIVE'" [class.badge-warning]="agreement.status.toUpperCase() !== 'ACTIVE'"> -->
+                      <!--     {{ agreement.status }} -->
+                      <!--   </span> -->
+                      <!-- </td> -->
+                      <td>{{ agreement.contractSigningDate | date}}</td>
                     </tr>
                   }
                 }

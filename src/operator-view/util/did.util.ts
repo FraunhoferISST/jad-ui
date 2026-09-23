@@ -19,7 +19,7 @@ export function slugifyTenantName(name: string): string {
  *
  * @param tenantName - The human-readable tenant name.
  * @param didPrefix - The configured DID prefix the slug is appended to
- *   (e.g. `did:web:identityhub%3A7083:`).
+ *   (e.g. `did:web:identity.jad.localhost:`).
  * @returns The generated DID, or an empty string when the name is blank.
  */
 export function generateParticipantDid(tenantName: string, didPrefix: string): string {

@@ -109,15 +109,23 @@ defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
 
-After deploying JAD, after deploying new participants, or when connector tokens
-expire (1h TTL), run the sync script. It updates/creates Keycloak participant
-users and refreshes the `edc_connector_config` claim:
-```sh
-./create-edc-connector-config.sh
+A background agent (`keycloakagent`) keeps participant identities in sync
+automatically. It runs in the cluster and, every 60 seconds, polls the Redline
+UI API (`service-providers` → `tenants` → `participants`), resolves each
+participant's `did:web` document to derive its DSP protocol URL and participant
+context id, upserts the jwtlet mapping for the EDC proxy service account, and
+creates/updates the Keycloak participant user with its `edc_connector_config`
+claim and the `participant` role. Only create/update is performed — users no
+longer present in Redline are never removed.
+
+Deploy it alongside JAD (see `ops/keycloakagent/`):
+
+```bash
+kubectl apply -k ops/keycloakagent
 ```
 
-The script uses `connectorName` (from participant DID) as both username and
-password for each participant user in dev.
+The agent uses the `connectorName` (from the participant DID) as both username
+and password for each participant user in dev.
 
 ## Authentication & roles
 
@@ -160,16 +168,16 @@ kubectl apply -k ops/keycloak/overlays/gateway
 3) Verify:
 
 ```bash
-kubectl -n jad-auth get pods
-kubectl -n jad-auth get gateways.gateway.networking.k8s.io
-kubectl -n jad-auth get httproutes.gateway.networking.k8s.io
+kubectl -n edc-v get pods
+kubectl -n edc-v get gateways.gateway.networking.k8s.io
+kubectl -n edc-v get httproutes.gateway.networking.k8s.io
 ```
 
 If your cluster does not have Gateway API support, use the ingress overlay:
 
 ```bash
 kubectl apply -k ops/keycloak/overlays/ingress
-kubectl -n jad-auth get ingress
+kubectl -n edc-v get ingress
 ```
 
 Keycloak will be available at `http://keycloak.jad.localhost` and the imported

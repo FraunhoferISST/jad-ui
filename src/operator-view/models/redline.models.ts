@@ -13,7 +13,7 @@ export interface RedlineConfig {
   /**
    * Prefix used when generating a participant DID from a tenant name. The
    * slugified tenant name is appended to this prefix (e.g.
-   * `did:web:identityhub%3A7083:`).
+   * `did:web:identity.jad.localhost:`).
    */
   didPrefix: string;
 }
