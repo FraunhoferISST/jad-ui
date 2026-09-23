@@ -40,30 +40,19 @@ export class UploadService {
 
     const formData = new FormData();
 
-    const publicMetadata = {
+    const metadata = {
       size: file.size,
       type: file.type,
       assetId: ids.assetId,
       originalFilename: file.name,
       uploadMarker: ids.uploadMarker,
-    };
-
-    const privateMetadata = {
       partnerIds: normalizedPartnerIds,
       origin: 'owned',
       policyId: ids.policyId,
       contractDefinitionId: ids.contractDefinitionId,
     };
 
-    formData.append(
-      'publicMetadata',
-      new Blob([JSON.stringify(publicMetadata)], { type: 'application/json' }),
-    );
-    formData.append(
-      'privateMetadata',
-      new Blob([JSON.stringify(privateMetadata)], { type: 'application/json' }),
-    );
-
+    formData.append( 'metadata', JSON.stringify(metadata));
     formData.append('file', file, file.name);
 
     await this.fileSharing.uploadFile(formData);
