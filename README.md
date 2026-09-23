@@ -109,24 +109,6 @@ defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
 
-A background agent (`keycloakagent`) keeps participant identities in sync
-automatically. It runs in the cluster and, every 60 seconds, polls the Redline
-UI API (`service-providers` → `tenants` → `participants`), resolves each
-participant's `did:web` document to derive its DSP protocol URL and participant
-context id, upserts the jwtlet mapping for the EDC proxy service account, and
-creates/updates the Keycloak participant user with its `edc_connector_config`
-claim and the `participant` role. Only create/update is performed — users no
-longer present in Redline are never removed.
-
-Deploy it alongside JAD (see `ops/keycloakagent/`):
-
-```bash
-kubectl apply -k ops/keycloakagent
-```
-
-The agent uses the `connectorName` (from the participant DID) as both username
-and password for each participant user in dev.
-
 ## Authentication & roles
 
 Auth is abstracted behind `AuthProvider`. The shipped
@@ -161,7 +143,6 @@ Kubernetes manifests for local development are under `ops/keycloak/`.
 2) Deploy Keycloak:
 
 ```bash
-kubectl apply -k ops/keycloak/base
 kubectl apply -k ops/keycloak/overlays/gateway
 ```
 
@@ -191,7 +172,24 @@ The realm import config creates:
 - protocol mappers for `participant_context_id`, `edc_connector_config`, and `operator_id`
 - demo users `operator` and `participant` with role-specific attributes
 
-_Note_: As long as there is no identity provider, the `operator` role can access all service providers and the `participant` role has access to all participants.
+### Sync Redline participants with Keycloak
+A background agent (`keycloakagent`) keeps participant identities in sync
+automatically. It runs in the cluster and, every 60 seconds, polls the Redline
+UI API (`service-providers` → `tenants` → `participants`), resolves each
+participant's `did:web` document to derive its DSP protocol URL and participant
+context id, upserts the jwtlet mapping for the EDC proxy service account, and
+creates/updates the Keycloak participant user with its `edc_connector_config`
+claim and the `participant` role. Only create/update is performed — users no
+longer present in Redline are never removed.
+
+Deploy it alongside JAD (see `ops/keycloakagent/`):
+
+```bash
+kubectl apply -k ops/keycloakagent
+```
+
+The agent uses the path of the did `did:web:identity.jad.localhost:<path>` as both username
+and password for each participant user in dev.
 
 ## Project structure
 
