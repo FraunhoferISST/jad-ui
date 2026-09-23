@@ -121,7 +121,7 @@ export class PartnersListComponent {
 
         const request: PartnerReferenceRequest = {
           identifier: option.participantIdentifier,
-          nickname: option.participantIdentifier,
+          nickname: option.displayName,
         };
 
         try {
@@ -257,7 +257,7 @@ export class PartnersListComponent {
       participantId: participant.id,
       tenantName: tenant.name,
       participantIdentifier: identifier,
-      displayName: `${tenant.name} - ${identifier}`,
+      displayName: `${tenant.name}`,
     });
   }
 }
