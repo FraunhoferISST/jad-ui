@@ -4,7 +4,8 @@ import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import {
     ContractAgreement,
     Dataset,
-    JsonLdService, PolicyBuilder
+    JsonLdService, PolicyBuilder,
+    QuerySpec
 } from '@think-it-labs/edc-connector-client';
 
 import { FileAsset } from '../models/file-asset.model';
@@ -89,9 +90,36 @@ export class CatalogService {
     return files;
   }
 
-  private async listAgreements(): Promise<ContractAgreement[]> {
+  async getAgreementsForFile(file: FileAsset): Promise<ContractAgreement[]> {
+    const agreements = await this.listAgreements(file.assetId);
+    const partnerIds = this.partnerIdsFromMetadata(file);
+
+    if (partnerIds.length === 0) {
+      return agreements;
+    }
+
+    return agreements.filter(agreement =>
+      file.origin === 'owned'
+        ? partnerIds.includes(agreement.consumerId)
+        : partnerIds.includes(agreement.providerId),
+    );
+  }
+
+  private partnerIdsFromMetadata(file: FileAsset): string[] {
+    return (file.accessRestrictions ?? [])
+      .map(restriction => restriction.partnerId)
+      .filter((partnerId): partnerId is string => !!partnerId);
+  }
+
+  private async listAgreements(assetId?: string): Promise<ContractAgreement[]> {
     const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
-    return client.v5contractAgreements.queryAll({"@type": 'QuerySpec'});
+    const querySpec: QuerySpec = { "@type": 'QuerySpec' };
+    if (assetId) {
+      querySpec.filterExpression = [
+        { '@type': 'Criterion', operandLeft: 'assetId', operator: '=', operandRight: assetId },
+      ];
+    }
+    return client.v5contractAgreements.queryAll(querySpec);
   }
 
   async requestAccess(file: FileAsset): Promise<void> {

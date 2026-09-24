@@ -109,9 +109,7 @@ export class FilesListComponent {
     this.modalAndAlert.openModal(
       FileDetailComponent,
       { fileId: file.id },
-      {
-        close: () => this.modalAndAlert.closeModal(),
-      },
+      undefined,
       true,
     );
   }

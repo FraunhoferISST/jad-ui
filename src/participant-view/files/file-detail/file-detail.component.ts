@@ -1,8 +1,9 @@
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
-import { Component, EventEmitter, inject, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
+import { CatalogService } from '../../services/catalog.service';
 import { FilesService } from '../../services/files.service';
 import { TransferService } from '../../services/transfer.service';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
@@ -17,9 +18,9 @@ export class FileDetailComponent implements OnChanges {
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly filesService = inject(FilesService);
   private readonly transferService = inject(TransferService);
+  private readonly catalogService = inject(CatalogService);
 
   @Input() fileId = '';
-  @Output() close = new EventEmitter<void>();
 
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
@@ -48,8 +49,14 @@ export class FileDetailComponent implements OnChanges {
     }
   }
 
-  closeDetails(): void {
-    this.close.emit();
+  agreementPartnerName(file: FileAsset, agreement: { providerId: string; consumerId: string }): string {
+    const partnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
+    const restriction = (file.accessRestrictions ?? []).find(item => item.partnerId === partnerId);
+    return restriction?.partnerName || partnerId || 'N/A';
+  }
+
+  agreementDate(epochSeconds: number): number {
+    return epochSeconds * 1000;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -73,6 +80,7 @@ export class FileDetailComponent implements OnChanges {
         return;
       }
 
+      file.agreements = await this.catalogService.getAgreementsForFile(file);
       file.transactionHistory = await this.transferService.getFileTransferHistory(file);
       this.file = file;
     } catch (error) {

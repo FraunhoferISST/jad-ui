@@ -48,29 +48,49 @@ export class TransferService {
       return [];
     }
 
+    const partnerIds = this.partnerIdsFromMetadata(file);
+    const partners = await this.partnerService.getPartners();
+    const partnerNames = new Map(
+      partners.filter(partner => !!partner.identifier).map(partner => [partner.identifier, partner.nickname]),
+    );
+
     const transfers = await (
       await this.edcClientService.getClient()
     ).management.transferProcesses.queryAll();
     const history: Transaction[] = [];
 
     for (const agreement of file.agreements) {
+      if (partnerIds.length > 0) {
+        const agreementPartnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
+        if (!partnerIds.includes(agreementPartnerId)) {
+          continue;
+        }
+      }
+
       const related = transfers.filter(transfer => transfer.contractId === agreement.id);
-      const partnerName = (await this.partnerService.getPartners()).filter(partner => partner.identifier === agreement.providerId).at(0)?.nickname;
+      const partnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
+      const partnerName = partnerNames.get(partnerId);
       for (const transfer of related) {
         history.push({
           id: transfer.correlationId ?? `${agreement.id}-${transfer.createdAt ?? Date.now()}`,
-          partnerId: agreement.providerId,
+          partnerId,
           partnerName: partnerName ?? 'unknown',
           type: transfer.type === 'CONSUMER' ? 'access' : 'share',
           status: (transfer.state ?? '').toUpperCase() === 'STARTED' ? 'success' : 'failed',
           timestamp: transfer.createdAt
-            ? new Date(transfer.createdAt).toISOString()
+            ? new Date(transfer.createdAt * 1000).toISOString()
             : new Date().toISOString(),
         });
       }
     }
 
     return history.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+
+  private partnerIdsFromMetadata(file: FileAsset): string[] {
+    return (file.accessRestrictions ?? [])
+      .map(restriction => restriction.partnerId)
+      .filter((partnerId): partnerId is string => !!partnerId);
   }
 
   private async waitForTransferStarted(transferProcessId: string): Promise<TransferProcess> {
