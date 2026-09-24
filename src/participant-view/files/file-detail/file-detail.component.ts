@@ -1,10 +1,9 @@
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
-import { Component, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, inject, Input, OnInit } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
-import { FilesService } from '../../services/files.service';
 import { TransferService } from '../../services/transfer.service';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
@@ -14,19 +13,18 @@ import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
   imports: [CommonModule, DatePipe, TitleCasePipe],
   templateUrl: './file-detail.component.html',
 })
-export class FileDetailComponent implements OnChanges {
+export class FileDetailComponent implements OnInit {
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly filesService = inject(FilesService);
   private readonly transferService = inject(TransferService);
   private readonly catalogService = inject(CatalogService);
 
-  @Input() fileId = '';
+  @Input({ required: true }) file!: FileAsset;
 
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
 
-  file: FileAsset | null = null;
-  loading = true;
+  loadingAgreements = true;
+  loadingTransferHistory = true;
   requestingTransfer = false;
 
   async download(): Promise<void> {
@@ -49,9 +47,14 @@ export class FileDetailComponent implements OnChanges {
     }
   }
 
-  agreementPartnerName(file: FileAsset, agreement: { providerId: string; consumerId: string }): string {
+  agreementPartnerName(
+    file: FileAsset,
+    agreement: { providerId: string; consumerId: string },
+  ): string {
     const partnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
-    const restriction = (file.accessRestrictions ?? []).find(item => item.partnerId === partnerId);
+    const restriction = (file.accessRestrictions ?? []).find(
+      (item) => item.partnerId === partnerId,
+    );
     return restriction?.partnerName || partnerId || 'N/A';
   }
 
@@ -59,35 +62,30 @@ export class FileDetailComponent implements OnChanges {
     return epochSeconds * 1000;
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['fileId'] && this.fileId) {
-      void this.load();
+  async ngOnInit() {
+    await this.loadAgreements();
+    await this.loadTransferHistory();
+  }
+
+  private async loadAgreements(): Promise<void> {
+    try {
+      this.file.agreements = await this.catalogService.getAgreementsForFile(this.file);
+    } catch (error) {
+      this.showError(error, 'Failed to load agreements');
+      this.file.agreements = [];
+    } finally {
+      this.loadingAgreements = false;
     }
   }
 
-  private async load(): Promise<void> {
-    this.loading = true;
-    if (!this.fileId) {
-      this.loading = false;
-      return;
-    }
-
+  private async loadTransferHistory(): Promise<void> {
     try {
-      const files = await this.filesService.getFilesForFilesView();
-      const file = files.find(item => item.id === this.fileId);
-      if (!file) {
-        this.file = null;
-        return;
-      }
-
-      file.agreements = await this.catalogService.getAgreementsForFile(file);
-      file.transactionHistory = await this.transferService.getFileTransferHistory(file);
-      this.file = file;
+      this.file.transactionHistory = await this.transferService.getFileTransferHistory(this.file);
     } catch (error) {
-      this.showError(error, 'Failed to load file details');
-      this.file = null;
+      this.showError(error, 'Failed to load transfer history');
+      this.file.transactionHistory = [];
     } finally {
-      this.loading = false;
+      this.loadingTransferHistory = false;
     }
   }
 

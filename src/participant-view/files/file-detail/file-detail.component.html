@@ -1,70 +1,76 @@
 <div class="flex max-h-[calc(95vh-6rem)] flex-col gap-6 overflow-y-auto pr-1">
-  @if (loading) {
-    <div class="rounded-2xl border border-base-300 bg-base-200 p-10 text-center">
-      <span class="loading loading-spinner loading-lg"></span>
+  <div class="flex flex-col gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-semibold">{{ file.name || 'N/A' }}</h1>
+        <p class="text-sm text-base-content/70">
+          {{ file.description || 'No description available.' }}
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span
+          class="badge"
+          [class.badge-success]="file.origin === 'owned'"
+          [class.badge-warning]="file.origin !== 'owned'"
+        >
+          {{ file.origin | titlecase }}
+        </span>
+        @if (file.origin === 'remote') {
+          <button
+            class="btn btn-primary btn-sm"
+            type="button"
+            [disabled]="requestingTransfer"
+            (click)="download()"
+          >
+            @if (requestingTransfer) {
+              <span class="loading loading-spinner loading-xs"></span>
+              Downloading
+            } @else {
+              <span class="material-symbols-rounded">download</span>
+              Download
+            }
+          </button>
+        }
+      </div>
     </div>
-  } @else if (!file) {
-    <div role="alert" class="alert alert-error alert-soft">
-      <span class="material-symbols-rounded">error</span>
-      <span>File not found.</span>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div class="rounded-xl border border-base-300 bg-base-200 p-3">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">File type</p>
+        <p class="font-medium">{{ file.type || 'N/A' }}</p>
+      </div>
+      <div class="rounded-xl border border-base-300 bg-base-200 p-3">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">File size</p>
+        <p class="font-medium">{{ formatFileSize(file.size) }}</p>
+      </div>
     </div>
-  } @else {
-    <div class="flex flex-col gap-6">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold">{{ file.name || 'N/A' }}</h1>
-          <p class="text-sm text-base-content/70">{{ file.description || 'No description available.' }}</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="badge" [class.badge-success]="file.origin === 'owned'" [class.badge-warning]="file.origin !== 'owned'">
-            {{ file.origin | titlecase }}
-          </span>
-          @if (file.origin === 'remote') {
-            <button class="btn btn-primary btn-sm" type="button" [disabled]="requestingTransfer" (click)="download()">
-              @if (requestingTransfer) {
-                <span class="loading loading-spinner loading-xs"></span>
-                Downloading
-              } @else {
-                <span class="material-symbols-rounded">download</span>
-                Download
-              }
-            </button>
+
+    <section class="rounded-xl bg-base-200 p-4">
+      <h2 class="mb-3 font-semibold">Shared with</h2>
+      @if (!file.accessRestrictions || file.accessRestrictions.length === 0) {
+        <p class="text-sm text-base-content/70">Not shared with any partners.</p>
+      } @else {
+        <div class="flex flex-wrap gap-2">
+          @for (partner of file.accessRestrictions; track partner.partnerId) {
+            <span class="badge badge-outline">
+              {{ partner.partnerName || partner.partnerId || 'N/A' }}
+            </span>
           }
         </div>
-      </div>
+      }
+    </section>
 
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div class="rounded-xl border border-base-300 bg-base-200 p-3">
-          <p class="text-xs uppercase tracking-wide text-base-content/60">File type</p>
-          <p class="font-medium">{{ file.type || 'N/A' }}</p>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <section class="rounded-xl bg-base-200">
+        <div class="px-4 py-3">
+          <h2 class="font-semibold">Agreements</h2>
         </div>
-        <div class="rounded-xl border border-base-300 bg-base-200 p-3">
-          <p class="text-xs uppercase tracking-wide text-base-content/60">File size</p>
-          <p class="font-medium">{{ formatFileSize(file.size) }}</p>
-        </div>
-      </div>
-
-      <section class="rounded-xl bg-base-200 p-4">
-        <h2 class="mb-3 font-semibold">Shared with</h2>
-        @if (!file.accessRestrictions || file.accessRestrictions.length === 0) {
-          <p class="text-sm text-base-content/70">Not shared with any partners.</p>
-        } @else {
-          <div class="flex flex-wrap gap-2">
-            @for (partner of file.accessRestrictions; track partner.partnerId) {
-              <span class="badge badge-outline">
-                {{ partner.partnerName || partner.partnerId || 'N/A' }}
-              </span>
-            }
-          </div>
-        }
-      </section>
-
-      <div class="grid gap-6 lg:grid-cols-2">
-        <section class="rounded-xl bg-base-200">
-          <div class="px-4 py-3">
-            <h2 class="font-semibold">Agreements</h2>
-          </div>
-          <div class="overflow-x-auto rounded-b-xl">
+        <div class="overflow-x-auto rounded-b-xl">
+          @if (loadingAgreements) {
+            <div class="p-10 text-center">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          } @else {
             <table class="table table-zebra">
               <thead>
                 <tr>
@@ -76,7 +82,9 @@
               <tbody>
                 @if (!file.agreements || file.agreements.length === 0) {
                   <tr>
-                    <td colspan="3" class="text-center text-base-content/70">No agreements available.</td>
+                    <td colspan="3" class="text-center text-base-content/70">
+                      No agreements available.
+                    </td>
                   </tr>
                 } @else {
                   @for (agreement of file.agreements; track agreement.id) {
@@ -85,20 +93,31 @@
                       <td>
                         <span class="badge badge-success badge-sm">Active</span>
                       </td>
-                      <td>{{ agreementDate(agreement.contractSigningDate) | date: DATE_FORMATS.dateWithTime }}</td>
+                      <td>
+                        {{
+                          agreementDate(agreement.contractSigningDate)
+                            | date: DATE_FORMATS.dateWithTime
+                        }}
+                      </td>
                     </tr>
                   }
                 }
               </tbody>
             </table>
-          </div>
-        </section>
+          }
+        </div>
+      </section>
 
-        <section class="rounded-xl bg-base-200">
-          <div class="px-4 py-3">
-            <h2 class="font-semibold">Transfer history</h2>
-          </div>
-          <div class="overflow-x-auto rounded-b-xl">
+      <section class="rounded-xl bg-base-200">
+        <div class="px-4 py-3">
+          <h2 class="font-semibold">Transfer history</h2>
+        </div>
+        <div class="overflow-x-auto rounded-b-xl">
+          @if (loadingTransferHistory) {
+            <div class="p-10 text-center">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          } @else {
             <table class="table table-zebra">
               <thead>
                 <tr>
@@ -111,7 +130,9 @@
               <tbody>
                 @if (!file.transactionHistory || file.transactionHistory.length === 0) {
                   <tr>
-                    <td colspan="4" class="text-center text-base-content/70">No transfer history available.</td>
+                    <td colspan="4" class="text-center text-base-content/70">
+                      No transfer history available.
+                    </td>
                   </tr>
                 } @else {
                   @for (transaction of file.transactionHistory; track transaction.id) {
@@ -120,7 +141,12 @@
                       <td>{{ transaction.partnerName || transaction.partnerId || 'N/A' }}</td>
                       <td>{{ transaction.type | titlecase }}</td>
                       <td>
-                        <span class="badge" [class.badge-success]="transaction.status === 'success'" [class.badge-error]="transaction.status === 'failed'" [class.badge-warning]="transaction.status === 'pending'">
+                        <span
+                          class="badge"
+                          [class.badge-success]="transaction.status === 'success'"
+                          [class.badge-error]="transaction.status === 'failed'"
+                          [class.badge-warning]="transaction.status === 'pending'"
+                        >
                           {{ transaction.status | titlecase }}
                         </span>
                       </td>
@@ -129,9 +155,9 @@
                 }
               </tbody>
             </table>
-          </div>
-        </section>
-      </div>
+          }
+        </div>
+      </section>
     </div>
-  }
+  </div>
 </div>
