@@ -55,6 +55,9 @@ class FakeAuthProvider implements AuthProvider {
   restoreCalls = 0;
   callbackCalls = 0;
   postLoginReturnUrl: string | null = null;
+  refreshResult: AuthSession | null = null;
+  refreshCalls = 0;
+  tokenChangeListeners: Array<() => void> = [];
 
   async login(returnUrl?: string): Promise<void> {
     this.loginCalls.push(returnUrl);
@@ -90,6 +93,19 @@ class FakeAuthProvider implements AuthProvider {
     const url = this.postLoginReturnUrl;
     this.postLoginReturnUrl = null;
     return url;
+  }
+
+  async refreshSession(): Promise<AuthSession | null> {
+    this.refreshCalls++;
+    return this.refreshResult;
+  }
+
+  subscribeToTokenChanges(listener: () => void): void {
+    this.tokenChangeListeners.push(listener);
+  }
+
+  emitTokenChange(): void {
+    this.tokenChangeListeners.forEach(listener => listener());
   }
 }
 
@@ -147,6 +163,38 @@ describe('AuthService', () => {
       expect(service.isAuthenticated()).toBe(false);
       expect(service.consumeInitializationError()).toBe('oidc callback failed');
       expect(service.consumeInitializationError()).toBeNull();
+    });
+  });
+
+  describe('token refresh propagation', () => {
+    it('re-syncs the session token when the provider signals a token change', async () => {
+      const refreshed = participantSession({ token: 'fresh-token', expiresAt: Date.now() + 60_000 });
+      provider.restoreResult = participantSession({ token: 'stale-token' });
+      provider.refreshResult = refreshed;
+      const service = createService();
+
+      await service.initialize();
+      expect(service.session()?.token).toBe('stale-token');
+
+      provider.emitTokenChange();
+      await new Promise(resolve => setTimeout(resolve));
+
+      expect(provider.refreshCalls).toBe(1);
+      expect(service.session()?.token).toBe('fresh-token');
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(refreshed));
+    });
+
+    it('keeps the current session when a refresh returns no session', async () => {
+      provider.restoreResult = participantSession({ token: 'stale-token' });
+      provider.refreshResult = null;
+      const service = createService();
+
+      await service.initialize();
+      provider.emitTokenChange();
+      await new Promise(resolve => setTimeout(resolve));
+
+      expect(service.session()?.token).toBe('stale-token');
+      expect(service.isAuthenticated()).toBe(true);
     });
   });
 

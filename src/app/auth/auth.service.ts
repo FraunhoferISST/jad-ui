@@ -20,6 +20,7 @@ export class AuthService {
   private readonly _initializationError = signal<string | null>(null);
   private initializationPromise: Promise<void> | null = null;
   private initialized = false;
+  private tokenChangeSubscribed = false;
 
   /** The current session, or `null` when not authenticated. */
   readonly session = this._session.asReadonly();
@@ -155,6 +156,7 @@ export class AuthService {
 
     if (callbackSession) {
       this.setSession(callbackSession);
+      this.subscribeToTokenChanges();
       return;
     }
 
@@ -162,5 +164,32 @@ export class AuthService {
       const restored = await this.provider.restoreSession();
       this.setSession(restored);
     }
+    this.subscribeToTokenChanges();
+  }
+
+  /**
+   * Re-sync the session's token/expiry whenever the provider refreshes its
+   * tokens in the background (e.g. silent refresh), so HTTP callers never send
+   * a stale, expired bearer token.
+   */
+  private subscribeToTokenChanges(): void {
+    if (this.tokenChangeSubscribed || !this.provider.subscribeToTokenChanges) {
+      return;
+    }
+    this.tokenChangeSubscribed = true;
+
+    this.provider.subscribeToTokenChanges(async () => {
+      if (!this.provider.refreshSession || !this.isAuthenticated()) {
+        return;
+      }
+      try {
+        const refreshed = await this.provider.refreshSession();
+        if (refreshed) {
+          this.setSession(refreshed);
+        }
+      } catch {
+        // Keep the last known session if a refresh re-read fails.
+      }
+    });
   }
 }

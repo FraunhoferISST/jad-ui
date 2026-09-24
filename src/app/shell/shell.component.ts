@@ -1,5 +1,6 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, effect, inject, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig } from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
@@ -51,6 +52,37 @@ export class ShellComponent implements OnInit {
     // deterministically by role in `ngOnInit`.
     localStorage.removeItem(CURRENT_CONNECTOR_KEY);
     this.stateService = inject(DashboardStateService);
+
+    // Keep a handle on whichever connector is currently selected. When the
+    // Keycloak provider silently refreshes the session token in the background,
+    // the EDC connector client must be rebuilt with the fresh bearer token, or
+    // every EDC call after the original token expires returns 401. The library
+    // captures `authorization.value` as a static string when the client is
+    // built (`setCurrentEdcConfig` -> `setDashboardClient`), so the only way to
+    // propagate a new token is to re-set the config. Re-setting the *current*
+    // config (rather than forcing `configs[0]`) preserves the connector the
+    // user has selected in the dashboard.
+    this.stateService.currentEdcConfig$
+      .pipe(takeUntilDestroyed())
+      .subscribe(config => {
+        this.currentEdcConfig = config;
+      });
+
+    // React to session-token changes (driven by `AuthService` re-syncing after
+    // a provider token refresh) and re-apply the fresh token to the EDC client.
+    // Guarded to the participant role because operator connectors are the
+    // Redline backend (no bearer-token authorization header).
+    effect(() => {
+      const token = this.auth.session()?.token;
+      if (this.auth.role() !== 'participant' || !this.currentEdcConfig || !token) {
+        return;
+      }
+      if (token === this.lastAppliedToken) {
+        return;
+      }
+      this.lastAppliedToken = token;
+      this.stateService.setCurrentEdcConfig(this.applyBearerToken(this.currentEdcConfig, token));
+    });
   }
 
   protected readonly themes = [
@@ -69,6 +101,14 @@ export class ShellComponent implements OnInit {
 
   protected edcConfigs?: Promise<EdcConfig[]>;
   protected appConfig?: Promise<AppConfig>;
+
+  /** The connector currently selected in the dashboard (tracked reactively so a
+   * token refresh re-applies the fresh bearer token to whichever connector the
+   * user has selected, not just the initial one). */
+  private currentEdcConfig?: EdcConfig;
+
+  /** Last token applied to the EDC client, used to skip redundant re-sets. */
+  private lastAppliedToken?: string;
 
   /** Components injected into the shell navbar's end region. The user dropdown
    * (with the logout action) is rendered there via the library's
@@ -111,17 +151,26 @@ export class ShellComponent implements OnInit {
       throw new Error('Missing participant EDC connector configuration in authentication claims.');
     }
 
-    config.authorization = {
-      key: config.authorization?.key ?? 'Authorization',
-      value: `Bearer ${this.auth.session()?.token ?? ''}`,
-    };
-
     config.customControllers = {
       'celExpressions': CelExpressionsController,
       'v5contractAgreements': V5ContractAgreementController
     }
 
-    return [config];
+    return [this.applyBearerToken(config, this.auth.session()?.token)];
+  }
+
+  /**
+   * Applies the current bearer token to the config's authorization header and
+   * returns the same config instance, so callers can pass it straight to the
+   * library's `setCurrentEdcConfig` (which rebuilds the EDC client from it).
+   */
+  private applyBearerToken(config: EdcConfig, token?: string): EdcConfig {
+    this.stateService
+    config.authorization = {
+      key: config.authorization?.key ?? 'Authorization',
+      value: `Bearer ${token ?? ''}`,
+    };
+    return config;
   }
 
   /**

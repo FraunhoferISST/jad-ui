@@ -123,6 +123,20 @@ export interface AuthProvider {
    * provider's login state.
    */
   consumePostLoginRedirectUrl?(): string | null;
+
+  /**
+   * Optional: rebuild the current session from the provider's *current* tokens
+   * (e.g. after a background token refresh). Returns `null` when there is no
+   * valid session/token right now.
+   */
+  refreshSession?(): Promise<AuthSession | null>;
+
+  /**
+   * Optional: register a listener invoked whenever the provider's tokens
+   * change (e.g. after a silent/refresh-token renewal), so the session's
+   * token/expiry can be re-synced without a page reload.
+   */
+  subscribeToTokenChanges?(listener: () => void): void;
 }
 
 /**

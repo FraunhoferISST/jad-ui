@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
-import { AuthConfig, OAuthService } from 'angular-oauth2-oidc';
+import { AuthConfig, OAuthEvent, OAuthInfoEvent, OAuthService } from 'angular-oauth2-oidc';
+import { filter, Subscription } from 'rxjs';
 import {
   AuthProvider,
   AuthSession,
@@ -29,6 +30,8 @@ export class KeycloakAuthProvider implements AuthProvider {
 
   private configured = false;
   private postLoginRedirectUrl: string | null = null;
+  private tokenChangeSubscription: Subscription | null = null;
+  private tokenChangeListeners = new Set<() => void>();
 
   async login(returnUrl = '/home'): Promise<void> {
     await this.ensureConfigured();
@@ -37,6 +40,9 @@ export class KeycloakAuthProvider implements AuthProvider {
 
   async logout(): Promise<void> {
     await this.ensureConfigured();
+    this.tokenChangeSubscription?.unsubscribe();
+    this.tokenChangeSubscription = null;
+    this.tokenChangeListeners.clear();
     this.oauth.logOut();
   }
 
@@ -85,6 +91,35 @@ export class KeycloakAuthProvider implements AuthProvider {
     return redirectUrl;
   }
 
+  async refreshSession(): Promise<AuthSession | null> {
+    if (!this.oauth.hasValidAccessToken()) {
+      return null;
+    }
+    return this.createSessionFromTokens();
+  }
+
+  subscribeToTokenChanges(listener: () => void): void {
+    this.tokenChangeListeners.add(listener);
+    this.setupTokenChangeSubscription();
+  }
+
+  private setupTokenChangeSubscription(): void {
+    if (this.tokenChangeSubscription || !this.configured) {
+      return;
+    }
+
+    const isTokenRefresh = (event: OAuthEvent): boolean =>
+      event.type === 'token_received' ||
+      event.type === 'token_refreshed' ||
+      (event instanceof OAuthInfoEvent && event.type === 'token_expires' && event.info === 'access_token');
+
+    this.tokenChangeSubscription = this.oauth.events
+      .pipe(filter(isTokenRefresh))
+      .subscribe(() => {
+        this.tokenChangeListeners.forEach(listener => listener());
+      });
+  }
+
   private async ensureConfigured(): Promise<void> {
     if (this.configured) {
       return;
@@ -109,6 +144,7 @@ export class KeycloakAuthProvider implements AuthProvider {
     await this.oauth.loadDiscoveryDocument();
     this.oauth.setupAutomaticSilentRefresh();
     this.configured = true;
+    this.setupTokenChangeSubscription();
   }
 
   private createSessionFromTokens(): AuthSession {
