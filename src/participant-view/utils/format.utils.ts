@@ -11,6 +11,6 @@ export function formatFileSize(bytes: number | undefined | null): string {
 }
 
 export const DATE_FORMATS = {
-  shortDate: 'yyyy-MM-dd',
-  dateWithTime: 'yyyy-MM-dd HH:mm:ss',
+  shortDate: 'dd.MM.yyyy',
+  dateWithTime: 'dd.MM.yyyy HH:mm:ss',
 };
