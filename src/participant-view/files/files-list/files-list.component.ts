@@ -9,11 +9,11 @@ import {
 } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
-import { FileSharingFileResource } from '../../models/file-sharing-data.model';
 import { FileSharingApiService } from '../../services/file-sharing-api.service';
+import { FilesService } from '../../services/files.service';
+import { TransferService } from '../../services/transfer.service';
 import { FileDetailComponent } from '../file-detail/file-detail.component';
 import { FileUploadComponent } from '../file-upload/file-upload.component';
-import { asNumber, asString } from '../../utils/cast.utils';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
 @Component({
@@ -32,6 +32,8 @@ export class FilesListComponent {
   private readonly router = inject(Router);
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly fileSharing = inject(FileSharingApiService);
+  private readonly filesService = inject(FilesService);
+  private readonly transferService = inject(TransferService);
 
   files: FileAsset[] = [];
   filteredFiles: FileAsset[] = [];
@@ -43,6 +45,7 @@ export class FilesListComponent {
   loading = true;
   pageItemCount = 10;
   searchText = '';
+  downloadingId: string | null = null;
 
   constructor() {
     void this.loadData();
@@ -60,12 +63,8 @@ export class FilesListComponent {
   async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const files = await this.fileSharing.listFiles();
-      const mappedFiles = files
-        .map(file => this.mapFileSharingResource(file))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      this.files = mappedFiles;
+      const files = await this.filesService.getFilesForFilesView();
+      this.files = files;
       this.applyFilters();
     } catch (error) {
       this.showError(error, 'Failed to load files');
@@ -114,6 +113,27 @@ export class FilesListComponent {
     );
   }
 
+  async download(file: FileAsset): Promise<void> {
+    this.downloadingId = file.id;
+    try {
+      if (file.origin === 'owned') {
+        await this.fileSharing.downloadFile(file);
+      } else {
+        await this.transferService.requestTransferAndDownload(file);
+      }
+      this.modalAndAlert.showAlert(
+        `Started download for "${file.name}".`,
+        'Download',
+        'success',
+        5,
+      );
+    } catch (error) {
+      this.showError(error, 'Download failed');
+    } finally {
+      this.downloadingId = null;
+    }
+  }
+
   private applyFilters(): void {
     let next = [...this.files];
 
@@ -128,24 +148,6 @@ export class FilesListComponent {
     }
 
     this.filteredFiles = next;
-  }
-
-  private mapFileSharingResource(file: FileSharingFileResource): FileAsset {
-    const metadata = file.metadata ?? {};
-    const uploadedAt =
-      typeof file.uploadTimestamp === 'number' && Number.isFinite(file.uploadTimestamp)
-        ? new Date(file.uploadTimestamp).toISOString()
-        : '';
-
-    return {
-      id: file.id ?? '',
-      name:
-        file.fileName ?? asString(metadata['fileName']) ?? asString(metadata['name']) ?? file.id ?? '',
-      type: file.contentType ?? asString(metadata['contentType']) ?? '',
-      size: asNumber(metadata['size']) ?? file.contentLength ?? 0,
-      uploadedAt,
-      origin: 'owned',
-    };
   }
 
   private showError(error: unknown, title: string): void {

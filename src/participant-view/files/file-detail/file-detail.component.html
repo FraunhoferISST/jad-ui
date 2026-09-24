@@ -8,29 +8,20 @@
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <span
-          class="badge"
-          [class.badge-success]="file.origin === 'owned'"
-          [class.badge-warning]="file.origin !== 'owned'"
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          [disabled]="requestingTransfer"
+          (click)="download()"
         >
-          {{ file.origin | titlecase }}
-        </span>
-        @if (file.origin === 'remote') {
-          <button
-            class="btn btn-primary btn-sm"
-            type="button"
-            [disabled]="requestingTransfer"
-            (click)="download()"
-          >
-            @if (requestingTransfer) {
-              <span class="loading loading-spinner loading-xs"></span>
-              Downloading
-            } @else {
-              <span class="material-symbols-rounded">download</span>
-              Download
-            }
-          </button>
-        }
+          @if (requestingTransfer) {
+            <span class="loading loading-spinner loading-xs"></span>
+            Downloading
+          } @else {
+            <span class="material-symbols-rounded">download</span>
+            Download
+          }
+        </button>
       </div>
     </div>
 
@@ -46,17 +37,34 @@
     </div>
 
     <section class="rounded-xl bg-base-200 p-4">
-      <h2 class="mb-3 font-semibold">Shared with</h2>
-      @if (!file.accessRestrictions || file.accessRestrictions.length === 0) {
-        <p class="text-sm text-base-content/70">Not shared with any partners.</p>
-      } @else {
-        <div class="flex flex-wrap gap-2">
-          @for (partner of file.accessRestrictions; track partner.partnerId) {
-            <span class="badge badge-outline">
-              {{ partner.partnerName || partner.partnerId || 'N/A' }}
-            </span>
-          }
+      @if (file.origin === 'remote') {
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Shared by</h2>
+          <span class="badge badge-secondary" >
+            {{ file.origin | titlecase }}
+          </span>
         </div>
+        <span class="badge badge-outline">
+          {{ file.partnerName || file.partnerDid || 'N/A' }}
+        </span>
+      } @else {
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Shared with</h2>
+          <span class="badge badge-primary" >
+            {{ file.origin | titlecase }}
+          </span>
+        </div>
+        @if (!file.accessRestrictions || file.accessRestrictions.length === 0) {
+          <p class="text-sm text-base-content/70">Not shared with any partners.</p>
+        } @else {
+          <div class="flex flex-wrap gap-2">
+            @for (partner of file.accessRestrictions; track partner.partnerId) {
+              <span class="badge badge-outline">
+                {{ partner.partnerName || partner.partnerId || 'N/A' }}
+              </span>
+            }
+          </div>
+        }
       }
     </section>
 

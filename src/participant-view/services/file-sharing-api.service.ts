@@ -43,6 +43,25 @@ export class FileSharingApiService {
     );
   }
 
+  async downloadFile(file: { id: string; name?: string }): Promise<void> {
+    const { baseUrl, participantContextId, headers } = await this.resolveRequestContext();
+    const blob = await firstValueFrom(
+      this.http.get(
+        `${baseUrl}/api/files/${encodeURIComponent(participantContextId)}/${encodeURIComponent(file.id)}`,
+        { headers, responseType: 'blob' as const },
+      ),
+    );
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = file.name || file.id || 'download';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+
   private async resolveRequestContext(): Promise<{
     baseUrl: string;
     participantContextId: string;

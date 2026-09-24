@@ -4,6 +4,7 @@ import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
+import { FileSharingApiService } from '../../services/file-sharing-api.service';
 import { TransferService } from '../../services/transfer.service';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
@@ -17,6 +18,7 @@ export class FileDetailComponent implements OnInit {
   private readonly modalAndAlert = inject(ModalAndAlertService);
   private readonly transferService = inject(TransferService);
   private readonly catalogService = inject(CatalogService);
+  private readonly fileSharing = inject(FileSharingApiService);
 
   @Input({ required: true }) file!: FileAsset;
 
@@ -33,7 +35,11 @@ export class FileDetailComponent implements OnInit {
     }
     this.requestingTransfer = true;
     try {
-      await this.transferService.requestTransferAndDownload(this.file);
+      if (this.file.origin === 'owned') {
+        await this.fileSharing.downloadFile(this.file);
+      } else {
+        await this.transferService.requestTransferAndDownload(this.file);
+      }
       this.modalAndAlert.showAlert(
         `Started download for "${this.file.name}".`,
         'Download',
@@ -51,7 +57,10 @@ export class FileDetailComponent implements OnInit {
     file: FileAsset,
     agreement: { providerId: string; consumerId: string },
   ): string {
-    const partnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
+    if (file.origin !== 'owned') {
+      return file.partnerName || file.partnerDid || 'N/A';
+    }
+    const partnerId = agreement.consumerId;
     const restriction = (file.accessRestrictions ?? []).find(
       (item) => item.partnerId === partnerId,
     );

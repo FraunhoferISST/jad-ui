@@ -52,7 +52,7 @@ export class CatalogService {
         id: dataset.optionalValue('edc', 'fileId'),
         name: dataset.mandatoryValue('edc', 'name'),
         origin: 'remote',
-        uploadedAt: dataset.optionalValue('edc', 'name'),
+        uploadedAt: 'N/A',
         assetId: dataset['@id'],
         size: dataset.optionalValue('edc', 'size'),
         type: dataset.optionalValue('edc', 'contenttype'),
@@ -82,7 +82,7 @@ export class CatalogService {
       for (const file of matchingFiles) {
         file.agreements = [...(file.agreements ?? []), agreement];
         if (file.uploadedAt === 'N/A' && agreement.contractSigningDate) {
-          file.uploadedAt = agreement.contractSigningDate;
+          file.uploadedAt = agreement.contractSigningDate * 1000;
         }
       }
     }

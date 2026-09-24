@@ -36,7 +36,7 @@
           <th>Type</th>
           <th>Size</th>
           <th>Uploaded</th>
-          <th>File ID</th>
+          <th>Origin</th>
           <th class="text-right">Action</th>
         </tr>
       </thead>
@@ -69,10 +69,23 @@
               <td>{{ formatFileSize(file.size) }}</td>
               <td>{{ file.uploadedAt ? (file.uploadedAt | date: DATE_FORMATS.dateWithTime) : 'N/A' }}</td>
               <td>
-                <span class="text-xs">{{ file.id || 'N/A' }}</span>
+                <span class="badge badge-soft" [class.badge-primary]="file.origin === 'owned'" [class.badge-secondary]="file.origin === 'remote'">{{ (file.origin | titlecase) || 'N/A' }}</span>
               </td>
               <td>
-                <div class="flex justify-end">
+                <div class="flex justify-end gap-2">
+                  <button
+                    class="btn btn-sm"
+                    type="button"
+                    [disabled]="downloadingId === file.id"
+                    (click)="download(file)">
+                    @if (downloadingId === file.id) {
+                      <span class="loading loading-spinner loading-xs"></span>
+                      Downloading
+                    } @else {
+                      <span class="material-symbols-rounded">download</span>
+                      Download
+                    }
+                  </button>
                   <button class="btn btn-sm btn-ghost" type="button" (click)="openDetails(file)">
                     <span class="material-symbols-rounded">visibility</span>
                     View

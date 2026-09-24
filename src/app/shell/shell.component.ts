@@ -59,9 +59,7 @@ export class ShellComponent implements OnInit {
     // every EDC call after the original token expires returns 401. The library
     // captures `authorization.value` as a static string when the client is
     // built (`setCurrentEdcConfig` -> `setDashboardClient`), so the only way to
-    // propagate a new token is to re-set the config. Re-setting the *current*
-    // config (rather than forcing `configs[0]`) preserves the connector the
-    // user has selected in the dashboard.
+    // propagate a new token is to re-set the config.
     this.stateService.currentEdcConfig$
       .pipe(takeUntilDestroyed())
       .subscribe(config => {
