@@ -4,7 +4,6 @@ import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
-import { FilesService } from '../../services/files.service';
 import { TransferService } from '../../services/transfer.service';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
@@ -16,29 +15,29 @@ import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 })
 export class ExploreDetailComponent implements OnChanges {
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly filesService = inject(FilesService);
   private readonly catalogService = inject(CatalogService);
   private readonly transferService = inject(TransferService);
 
-  @Input() fileId = '';
+  @Input({ required: true }) file!: FileAsset;
 
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
 
-  file: FileAsset | null = null;
-  loading = true;
   loadingAgreements = true;
   loadingTransferHistory = true;
   requestingAccess = false;
   requestingTransfer = false;
 
-  hasAccess(file: FileAsset): boolean {
-    return (file.agreements?.length ?? 0) > 0;
+  hasAccess(): boolean {
+    return (this.file.agreements?.length ?? 0) > 0;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['fileId'] && this.fileId) {
-      void this.load();
+    if (changes['file']) {
+      this.loadingAgreements = true;
+      this.loadingTransferHistory = true;
+      void this.loadAgreements();
+      void this.loadTransferHistory();
     }
   }
 
@@ -54,15 +53,12 @@ export class ExploreDetailComponent implements OnChanges {
   }
 
   async requestAccess(): Promise<void> {
-    if (!this.file) {
-      return;
-    }
-
     this.requestingAccess = true;
     try {
       await this.catalogService.requestAccess(this.file);
       this.modalAndAlert.showAlert('Access granted successfully.', 'Access request', 'success', 5);
-      await this.load();
+      this.loadingAgreements = true;
+      await this.loadAgreements();
     } catch (error) {
       this.showError(error, 'Access request failed');
     } finally {
@@ -71,10 +67,6 @@ export class ExploreDetailComponent implements OnChanges {
   }
 
   async download(): Promise<void> {
-    if (!this.file) {
-      return;
-    }
-
     this.requestingTransfer = true;
     try {
       await this.transferService.requestTransferAndDownload(this.file);
@@ -91,31 +83,7 @@ export class ExploreDetailComponent implements OnChanges {
     }
   }
 
-  private async load(): Promise<void> {
-    this.loading = true;
-    if (!this.fileId) {
-      this.loading = false;
-      return;
-    }
-
-    try {
-      const files = await this.filesService.getFilesForExploreView();
-      this.file = files.find(item => item.id === this.fileId) ?? null;
-      if (this.file) {
-        await Promise.all([this.loadAgreements(), this.loadTransferHistory()]);
-      }
-    } catch (error) {
-      this.file = null;
-      this.showError(error, 'Failed to load file details');
-    } finally {
-      this.loading = false;
-    }
-  }
-
   private async loadAgreements(): Promise<void> {
-    if (!this.file) {
-      return;
-    }
     try {
       this.file.agreements = await this.catalogService.getAgreementsForFile(this.file);
     } catch (error) {
@@ -127,9 +95,6 @@ export class ExploreDetailComponent implements OnChanges {
   }
 
   private async loadTransferHistory(): Promise<void> {
-    if (!this.file) {
-      return;
-    }
     try {
       this.file.transactionHistory = await this.transferService.getFileTransferHistory(this.file);
     } catch (error) {

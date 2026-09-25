@@ -98,15 +98,7 @@ export class ExploreListComponent {
   }
 
   openDetails(file: FileAsset): void {
-    if (!file.id) {
-      return;
-    }
-    this.modalAndAlert.openModal(
-      ExploreDetailComponent,
-      { fileId: file.id },
-      undefined,
-      true,
-    );
+    this.modalAndAlert.openModal(ExploreDetailComponent, { file }, undefined, true);
   }
 
   private async loadData(): Promise<void> {
