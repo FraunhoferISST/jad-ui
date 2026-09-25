@@ -1,17 +1,17 @@
-import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, inject, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
+import { Component, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
 import { FilesService } from '../../services/files.service';
 import { TransferService } from '../../services/transfer.service';
-import { formatFileSize } from '../../utils/format.utils';
+import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
 
 @Component({
   selector: 'participant-explore-detail',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DatePipe, TitleCasePipe],
   templateUrl: './explore-detail.component.html',
 })
 export class ExploreDetailComponent implements OnChanges {
@@ -21,12 +21,14 @@ export class ExploreDetailComponent implements OnChanges {
   private readonly transferService = inject(TransferService);
 
   @Input() fileId = '';
-  @Output() close = new EventEmitter<void>();
 
+  readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
 
   file: FileAsset | null = null;
   loading = true;
+  loadingAgreements = true;
+  loadingTransferHistory = true;
   requestingAccess = false;
   requestingTransfer = false;
 
@@ -34,14 +36,21 @@ export class ExploreDetailComponent implements OnChanges {
     return (file.agreements?.length ?? 0) > 0;
   }
 
-  closeDetails(): void {
-    this.close.emit();
-  }
-
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['fileId'] && this.fileId) {
       void this.load();
     }
+  }
+
+  agreementPartnerName(
+    file: FileAsset,
+    agreement: { providerId: string; consumerId: string },
+  ): string {
+    return file.partnerName || agreement.providerId || 'N/A';
+  }
+
+  agreementDate(epochSeconds: number): number {
+    return epochSeconds * 1000;
   }
 
   async requestAccess(): Promise<void> {
@@ -92,11 +101,42 @@ export class ExploreDetailComponent implements OnChanges {
     try {
       const files = await this.filesService.getFilesForExploreView();
       this.file = files.find(item => item.id === this.fileId) ?? null;
+      if (this.file) {
+        await Promise.all([this.loadAgreements(), this.loadTransferHistory()]);
+      }
     } catch (error) {
       this.file = null;
       this.showError(error, 'Failed to load file details');
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async loadAgreements(): Promise<void> {
+    if (!this.file) {
+      return;
+    }
+    try {
+      this.file.agreements = await this.catalogService.getAgreementsForFile(this.file);
+    } catch (error) {
+      this.showError(error, 'Failed to load agreements');
+      this.file.agreements = [];
+    } finally {
+      this.loadingAgreements = false;
+    }
+  }
+
+  private async loadTransferHistory(): Promise<void> {
+    if (!this.file) {
+      return;
+    }
+    try {
+      this.file.transactionHistory = await this.transferService.getFileTransferHistory(this.file);
+    } catch (error) {
+      this.showError(error, 'Failed to load transfer history');
+      this.file.transactionHistory = [];
+    } finally {
+      this.loadingTransferHistory = false;
     }
   }
 

@@ -104,9 +104,7 @@ export class ExploreListComponent {
     this.modalAndAlert.openModal(
       ExploreDetailComponent,
       { fileId: file.id },
-      {
-        close: () => this.modalAndAlert.closeModal(),
-      },
+      undefined,
       true,
     );
   }

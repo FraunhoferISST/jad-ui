@@ -57,12 +57,10 @@ export class UploadService {
 
     await this.fileSharing.uploadFile(formData);
 
-    // const uploadedFile = await this.resolveUploadedFile(ids.uploadMarker, file.name);
-    // var fileId = uploadedFile.id;
-    const fileId = 'testId';
+    const uploadedFile = await this.resolveUploadedFile(ids.uploadMarker, file.name);
+    const fileId = uploadedFile.id;
     if (!fileId) {
       throw new Error('Uploaded file could not be resolved from file-sharing storage.');
-    } else {
     }
 
     const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
