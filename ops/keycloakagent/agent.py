@@ -311,7 +311,7 @@ def build_connector_config(participant_context_id, did, dsp, connector_name):
         "connectorName": connector_name,
         "managementUrl": f"{CONFIG.edc_proxy_base_url}/controlplane",
         "managementApiVersion": f"v5/participants/{participant_context_id}",
-        "defaultUrl": f"{CONFIG.jad_base_url}/api/management/health",
+        "defaultUrl": f"{CONFIG.edc_proxy_base_url}/default",
         "protocolUrl": dsp,
         "protocolVersion": "http-dsp-profile-2025-1",
         "did": did,
