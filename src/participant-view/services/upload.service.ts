@@ -9,11 +9,9 @@ import {
     PolicyDefinitionInput
 } from '@think-it-labs/edc-connector-client';
 
-import { AuthService } from '../../app/auth/auth.service';
 import { asString } from '../utils/cast.utils';
 import { PARTNER_ACCESS_EXPRESSION } from '../utils/policy.utils';
 import { FileSharingApiService } from './file-sharing-api.service';
-import { ParticipantConfigService } from './participant-config.service';
 import { ExtendedEdcClient } from '../models/edc.model';
 
 
@@ -26,9 +24,7 @@ interface UploadResourceIds {
 
 @Injectable({ providedIn: 'root' })
 export class UploadService {
-  private readonly auth = inject(AuthService);
   private readonly fileSharing = inject(FileSharingApiService);
-  private readonly participantConfig = inject(ParticipantConfigService);
   private readonly edcClientService = inject(EdcClientService);
 
   async uploadFile(
@@ -75,7 +71,7 @@ export class UploadService {
       await client.management.policyDefinitions.create(policyInput);
       policyCreated = true;
 
-      const assetInput = await this.createAssetInput({
+      const assetInput = this.createAssetInput({
         assetId: ids.assetId,
         file,
         fileId,
@@ -172,20 +168,12 @@ export class UploadService {
     };
   }
 
-  private async createAssetInput(params: {
+  private createAssetInput(params: {
     assetId: string;
     file: File;
     fileId: string;
     partnerIds: string[];
-  }): Promise<AssetInput> {
-    const participantContextId = this.auth.user()?.participantContextId;
-    if (!participantContextId) {
-      throw new Error('Participant context id is unavailable while creating the asset.');
-    }
-
-    const fileSharingConfig = await this.participantConfig.getFileSharingConfig();
-    const fileSourceUrl = `${fileSharingConfig.baseUrl.replace(/\/$/, '')}/api/files/${encodeURIComponent(participantContextId)}/${encodeURIComponent(params.fileId)}`;
-
+  }): AssetInput {
     return {
       '@type': 'Asset',
       '@id': params.assetId,
@@ -199,11 +187,11 @@ export class UploadService {
       privateProperties: {
         partnerIds: params.partnerIds,
       },
-      dataAddress: {
-        type: 'HttpData',
-        method: 'GET',
-        baseUrl: fileSourceUrl,
-        name: `upload-${params.assetId}`,
+      dataplaneMetadata: {
+        '@type': 'DataplaneMetadata',
+        properties: {
+          fileId: params.fileId,
+        },
       },
     };
   }
