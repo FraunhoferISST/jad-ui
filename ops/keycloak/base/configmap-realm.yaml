@@ -33,7 +33,10 @@ data:
             "name": "operator"
           },
           {
-            "name": "participant"
+            "name": "tenant-user"
+          },
+          {
+            "name": "tenant-admin"
           }
         ]
       },
@@ -165,7 +168,23 @@ data:
             }
           ],
           "realmRoles": [
-            "participant"
+            "tenant-user"
+          ]
+        },
+        {
+          "username": "participant-admin",
+          "enabled": true,
+          "emailVerified": true,
+          "firstName": "JAD",
+          "lastName": "Participant Admin",
+          "email": "participant-admin@jad.local",
+          "attributes": {
+            "participant_context_id": ["participant-context-dev-01"],
+            "edc_connector_config": ["{\"connectorName\":\"demo-provider\",\"managementUrl\":\"http://jad.localhost/api/management\",\"managementApiVersion\":\"v5beta/participants/participant-context-dev-01\",\"defaultUrl\":\"http://jad.localhost/api/management/health\",\"protocolUrl\":\"http://jad.localhost/api/dsp/participant-context-dev-01/http-dsp-profile-2025-1\",\"protocolVersion\":\"dataspace-protocol-http:2025-1\",\"did\":\"did:web:identity.jad.localhost:demo-provider\",\"authorization\":{\"key\":\"Authorization\",\"value\":\"Bearer replace-me\"}}"]
+          },
+          "credentials": [{"type": "password", "value": "admin", "temporary": false}],
+          "realmRoles": [
+            "tenant-admin"
           ]
         }
       ]

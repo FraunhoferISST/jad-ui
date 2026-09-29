@@ -1,24 +1,23 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, inject, Output } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { ModalAndAlertService, MultiselectWithSearchComponent } from '@eclipse-edc/dashboard-core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
+import { ContractDefinition } from '@think-it-labs/edc-connector-client';
 
-import { PartnerReference } from '../../models/redline-data.model';
 import { ParticipantConfigService } from '../../services/participant-config.service';
-import { PartnerService } from '../../services/partner.service';
 import { UploadService } from '../../services/upload.service';
 import { formatFileSize } from '../../utils/format.utils';
 
 @Component({
   selector: 'participant-file-upload',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MultiselectWithSearchComponent],
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './file-upload.component.html',
 })
 export class FileUploadComponent {
   private readonly fb = inject(FormBuilder);
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly partnerService = inject(PartnerService);
+  private readonly edcClientService = inject(EdcClientService);
   private readonly uploadService = inject(UploadService);
   private readonly configService = inject(ParticipantConfigService);
 
@@ -26,21 +25,17 @@ export class FileUploadComponent {
   @Output() uploaded = new EventEmitter<number>();
 
   readonly formatFileSize = formatFileSize;
-  readonly partnerDisplayFn = (partner: PartnerReference): string =>
-    partner.nickname || partner.identifier;
-
   readonly form = this.fb.nonNullable.group({
-    partnerIds: [[] as string[]],
+    contractDefinitionId: ['', Validators.required],
   });
 
   uploadStep = 1;
   selectedFiles: File[] = [];
-  partners: PartnerReference[] = [];
+  contractDefinitions: ContractDefinition[] = [];
   filePreviewData: Array<{
     name: string;
     size: number;
     type: string;
-    partners?: string[];
   }> = [];
 
   uploading = false;
@@ -50,7 +45,7 @@ export class FileUploadComponent {
 
   readonly uploadSteps = [
     { label: 'Select file', number: 1 },
-    { label: 'Access', number: 2 },
+    { label: 'Contract definition', number: 2 },
     { label: 'Review', number: 3 },
   ];
 
@@ -124,14 +119,14 @@ export class FileUploadComponent {
     if (step <= 1) {
       return true;
     }
-    return this.selectedFiles.length > 0;
+    return this.selectedFiles.length > 0 && (step !== 3 || this.form.valid);
   }
 
   canProceed(): boolean {
     if (this.uploadStep === 1) {
       return this.selectedFiles.length > 0;
     }
-    return true;
+    return this.uploadStep !== 2 || this.form.valid;
   }
 
   async upload(): Promise<void> {
@@ -139,12 +134,15 @@ export class FileUploadComponent {
       return;
     }
 
-    const partnerIds = this.form.controls.partnerIds.value;
+    const contractDefinitionId = this.form.controls.contractDefinitionId.value;
+    if (!contractDefinitionId || this.form.invalid) {
+      return;
+    }
 
     this.uploading = true;
     try {
       for (const file of this.selectedFiles) {
-        await this.uploadService.uploadFile(file, partnerIds);
+        await this.uploadService.uploadFile(file, contractDefinitionId);
       }
 
       this.uploaded.emit(this.selectedFiles.length);
@@ -160,48 +158,29 @@ export class FileUploadComponent {
     this.cancel.emit();
   }
 
-  getSelectedPartnerIds(): string[] {
-    return this.form.controls.partnerIds.value;
-  }
-
-  getSelectedPartners(): PartnerReference[] {
-    const selectedIds = this.getSelectedPartnerIds();
-    return this.partners.filter(partner => selectedIds.includes(partner.identifier));
-  }
-
-  onPartnerSelectionChange(selectedPartners: PartnerReference[]): void {
-    this.form.patchValue({
-      partnerIds: selectedPartners.map(partner => partner.identifier),
-    });
-  }
-
-  getSelectedPartnerLabels(): string[] {
-    const selected = this.getSelectedPartnerIds();
-    return this.partners
-      .filter(partner => selected.includes(partner.identifier))
-      .map(partner => partner.nickname || partner.identifier);
+  getSelectedDefinition(): ContractDefinition | undefined {
+    return this.contractDefinitions.find(
+      definition => definition.id === this.form.controls.contractDefinitionId.value,
+    );
   }
 
   private preparePreview(): void {
-    const selectedPartnerLabels = this.getSelectedPartnerLabels();
-
     this.filePreviewData = this.selectedFiles.map(file => ({
       name: file.name,
       size: file.size,
       type: file.type || 'application/octet-stream',
-      partners: selectedPartnerLabels.length > 0 ? selectedPartnerLabels : undefined,
     }));
   }
 
   private async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [partners, uploadConfig] = await Promise.all([
-        this.partnerService.getPartners(),
+      const [definitions, uploadConfig] = await Promise.all([
+        this.edcClientService.getClient().then(client => client.management.contractDefinitions.queryAll()),
         this.configService.getUploadConfig(),
       ]);
 
-      this.partners = partners;
+      this.contractDefinitions = definitions.sort((a, b) => a.id.localeCompare(b.id));
       this.maxFileSize = uploadConfig.maxFileSize;
       this.allowedFileTypes = uploadConfig.allowedFileTypes;
     } catch (error) {

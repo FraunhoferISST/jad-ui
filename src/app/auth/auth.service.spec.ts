@@ -8,7 +8,7 @@ function participantSession(overrides: Partial<AuthSession> = {}): AuthSession {
   return {
     user: {
       username: 'participant',
-      role: 'participant',
+      role: 'tenant-user',
       displayName: 'Participant',
       participantContextId: 'pcx-123',
       participantEdcConfig: {
@@ -253,7 +253,7 @@ describe('AuthService', () => {
       const service = createService();
 
       expect(service.isAuthenticated()).toBe(true);
-      expect(service.role()).toBe('participant');
+      expect(service.role()).toBe('tenant-user');
     });
 
     it('ignores a session with an invalid role', () => {
@@ -268,10 +268,17 @@ describe('AuthService', () => {
       expect(service.role()).toBeNull();
     });
 
+    it('ignores a session with the obsolete participant role', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(participantSession({
+        user: { ...participantSession().user, role: 'participant' as never },
+      })));
+      expect(createService().isAuthenticated()).toBe(false);
+    });
+
     it('ignores participant session without participantContextId', () => {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ user: { username: 'participant', role: 'participant' }, token: 'x' }),
+        JSON.stringify({ user: { username: 'participant', role: 'tenant-user' }, token: 'x' }),
       );
 
       const service = createService();
@@ -285,7 +292,7 @@ describe('AuthService', () => {
         JSON.stringify({
           user: {
             username: 'participant',
-            role: 'participant',
+            role: 'tenant-admin',
             participantContextId: 'pcx-123',
           },
           token: 'x',

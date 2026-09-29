@@ -25,7 +25,9 @@ deployment, backed by the Redline tenant-management API.
 
 - **EDC participant views** — Home, Catalog, Assets, Policy Definitions,
   Contract Definitions, Contracts, and Transfer History, all provided by the
-  `@eclipse-edc/dashboard-core` library and lazy-loaded per route.
+  `@eclipse-edc/dashboard-core` library and lazy-loaded per route for tenant admins.
+- **Tenant-user views** — Files (including uploads under an admin-created contract
+  definition) and Explore.
 - **Operator console** — Tenants and Open Registrations views for managing
   service providers, dataspaces, tenants, and participant deployments via the
   Redline backend.
@@ -51,13 +53,12 @@ deployment, backed by the Redline tenant-management API.
               Login view   Registration     ShellComponent  ──► <lib-dashboard-app>
                                             (role-filtered menu, themes, user menu)
                                                   │
-              ┌───────────────────────────────────┼──────────────────────────────┐
-              ▼                                   ▼                              ▼
-   participant views (library)         operator views (local)            shared: Home
-   catalog / assets / policies /     tenants / open-registrations
-   contract-definitions /            ──► RedlineService ──► Redline API
-   contracts / transfer-history
-   ──► EDC connectors
+               ┌───────────────────────────────────┼──────────────────────────────┐
+               ▼                                   ▼                              ▼
+    tenant-admin (EDC + Partners)       tenant-user (Files, Explore)      operator (Tenants)
+    catalog / assets / policies /       ──► file sharing + EDC           ──► Redline API
+    contract-definitions / contracts    shared Home for all roles
+    ──► EDC connectors
 ```
 
 - The authenticated **shell** owns the router-outlet and renders navigation from
@@ -114,18 +115,18 @@ Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/p
 Auth is abstracted behind `AuthProvider`. The shipped
 `KeycloakAuthProvider` uses OAuth 2.0 / OpenID Connect with Keycloak.
 
-Two realm roles are supported:
+Three realm roles are supported:
 
-- **participant** — EDC views (catalog, assets, policies, contracts, transfers).
+- **tenant-admin** — Partners and EDC views (catalog, assets, policies, contract definitions, contracts, transfers).
+- **tenant-user** — Files and Explore. Uploads reuse an existing contract definition and its policies; the tenant admin creates the definition.
 - **operator** — operator console (tenants, open registrations).
 
-Both can access Home. Access is defined once in
+All can access Home. Access is defined once in
 `src/app/auth/access-rules.ts` and enforced by `roleGuard` and the menu filter.
 
 Role-specific token claim requirements:
 
-- **participant** must have `participant_context_id` claim.
-- **participant** must have `edc_connector_config` claim.
+- **tenant-admin** and **tenant-user** must have `participant_context_id` and `edc_connector_config` claims.
 - **operator** must have `operator_id` claim.
 
 Missing required claims reject login during callback processing.
@@ -167,10 +168,10 @@ realm issuer at `http://keycloak.jad.localhost/realms/jad-dev`.
 The realm import config creates:
 
 - realm `jad-dev`
-- roles `operator` and `participant`
+- roles `operator`, `tenant-admin` and `tenant-user`
 - client `jad-ui` (public, code flow, PKCE)
 - protocol mappers for `participant_context_id`, `edc_connector_config`, and `operator_id`
-- demo users `operator` and `participant` with role-specific attributes
+- demo users `operator`, `participant` (tenant-user) and `participant-admin` (tenant-admin) with role-specific attributes
 
 ### Sync Redline participants with Keycloak
 A background agent (`keycloakagent`) keeps participant identities in sync
@@ -178,8 +179,9 @@ automatically. It runs in the cluster and, every 60 seconds, polls the Redline
 UI API (`service-providers` → `tenants` → `participants`), resolves each
 participant's `did:web` document to derive its DSP protocol URL and participant
 context id, upserts the jwtlet mapping for the EDC proxy service account, and
-creates/updates the Keycloak participant user with its `edc_connector_config`
-claim and the `participant` role. Only create/update is performed — users no
+creates/updates both Keycloak users with the same `edc_connector_config`
+claim. The existing username receives `tenant-user`; `<username>-admin` receives
+`tenant-admin`. Old `participant` role mappings are removed from synced users. Only create/update is performed — users no
 longer present in Redline are never removed.
 
 Deploy it alongside JAD (see `ops/keycloakagent/`):
@@ -188,8 +190,12 @@ Deploy it alongside JAD (see `ops/keycloakagent/`):
 kubectl apply -k ops/keycloakagent
 ```
 
-The agent uses the path of the did `did:web:identity.jad.localhost:<path>` as both username
-and password for each participant user in dev.
+The agent uses the path of the DID `did:web:identity.jad.localhost:<path>` as both username
+and password for the tenant-user in dev. The admin login is `<path>-admin` with password `admin`.
+
+Both logins currently use the same EDC proxy service-account jwtlet mapping, which retains
+its existing scopes. Restricting EDC scopes per login requires separate proxy/token identities;
+the UI role split alone does not enforce backend least privilege.
 
 ## Project structure
 

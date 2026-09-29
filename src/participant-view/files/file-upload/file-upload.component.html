@@ -12,7 +12,7 @@
       }
     </ul>
     <p class="fieldset-label">
-      Upload stores file content and then creates EDC policy expression, asset, policy definition and contract definition.
+      Upload stores file content, creates an EDC asset, and adds it to the selected contract definition.
     </p>
   </fieldset>
 
@@ -48,36 +48,24 @@
 
     @if (uploadStep === 2) {
       <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
-        <legend class="fieldset-legend text-sm">Access restrictions</legend>
+        <legend class="fieldset-legend text-sm">Contract definition</legend>
 
-        <div role="alert" class="alert alert-info alert-soft">
-          <span class="material-symbols-rounded">info</span>
-          <span>If no partner is selected, all ecosystem members can discover this file.</span>
-        </div>
-
-        <div class="mt-3 rounded-box border border-base-300 bg-base-100 p-3">
-          @if (getSelectedPartnerLabels().length > 0) {
-            <p class="mb-2 text-sm font-medium">Selected partners</p>
-            <div class="flex flex-wrap gap-2 max-w-full">
-              @for (label of getSelectedPartnerLabels(); track label) {
-                <span class="badge badge-soft max-w-full whitespace-normal break-all text-left">
-                  {{ label }}
-                </span>
-              }
-            </div>
-          } @else {
-            <p class="text-sm text-base-content/70">No partners selected.</p>
+        <label for="upload-contract-definition" class="label">Existing contract definition</label>
+        <select id="upload-contract-definition" class="select w-full" formControlName="contractDefinitionId" required>
+          <option value="" disabled>Select a contract definition</option>
+          @for (definition of contractDefinitions; track definition.id) {
+            <option [value]="definition.id">{{ definition.id }}</option>
           }
-        </div>
-
-        <lib-multiselect-with-search
-          class="mt-3 block w-full"
-          [items]="partners"
-          [preSelectedItems]="getSelectedPartners()"
-          [displayFn]="partnerDisplayFn"
-          [maxHeight]="240"
-          (selectedItemsChange)="onPartnerSelectionChange($event)">
-        </lib-multiselect-with-search>
+        </select>
+        @if (contractDefinitions.length === 0) {
+          <div role="alert" class="alert alert-info mt-3">Ask a tenant admin to create a contract definition before uploading.</div>
+        }
+        @if (getSelectedDefinition(); as definition) {
+          <div class="mt-3 rounded-box border border-base-300 bg-base-100 p-3 text-sm break-all">
+            <p>Access policy: {{ definition.accessPolicyId }}</p>
+            <p>Contract policy: {{ definition.contractPolicyId }}</p>
+          </div>
+        }
       </fieldset>
     }
 
@@ -93,13 +81,15 @@
                 <p class="text-xs text-base-content/70">
                   {{ preview.type }} - {{ formatFileSize(preview.size) }}
                 </p>
-                @if (preview.partners?.length) {
-                  <p class="text-xs text-base-content/70">Partners: {{ preview.partners?.join(', ') }}</p>
-                }
               </div>
             </li>
           }
         </ul>
+        @if (getSelectedDefinition(); as definition) {
+          <p class="mt-3 text-sm break-all">Contract definition: {{ definition.id }}</p>
+          <p class="text-sm break-all">Access policy: {{ definition.accessPolicyId }}</p>
+          <p class="text-sm break-all">Contract policy: {{ definition.contractPolicyId }}</p>
+        }
       </fieldset>
     }
   }

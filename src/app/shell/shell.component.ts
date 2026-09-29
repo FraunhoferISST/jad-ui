@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig } from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
+import { isTenantRole } from '../auth/auth.types';
 import { canAccess } from '../auth/access-rules';
 import { UserMenuComponent } from './user-menu.component';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
@@ -72,7 +73,7 @@ export class ShellComponent implements OnInit {
     // Redline backend (no bearer-token authorization header).
     effect(() => {
       const token = this.auth.session()?.token;
-      if (this.auth.role() !== 'participant' || !this.currentEdcConfig || !token) {
+      if (!isTenantRole(this.auth.role()) || !this.currentEdcConfig || !token) {
         return;
       }
       if (token === this.lastAppliedToken) {

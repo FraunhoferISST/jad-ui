@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { AuthService } from '../../app/auth/auth.service';
+import { isTenantRole } from '../../app/auth/auth.types';
 import { RedlineService } from '../../operator-view/services/redline.service';
 import { ParticipantContext } from '../models/participant-context.models';
 import { ParticipantConfigService } from './participant-config.service';
@@ -41,7 +42,7 @@ export class ParticipantContextService {
 
   private async resolveInternal(): Promise<ParticipantContext> {
     const user = this.auth.user();
-    if (!user || user.role !== 'participant' || !user.participantEdcConfig?.did) {
+    if (!user || !isTenantRole(user.role) || !user.participantEdcConfig?.did) {
       throw new Error('Participant context is unavailable for the current user session.');
     }
 

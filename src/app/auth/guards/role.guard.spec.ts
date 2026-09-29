@@ -34,7 +34,7 @@ describe('roleGuard', () => {
   });
 
   it('redirects to /home when the role may not access the route', () => {
-    configure('participant');
+    configure('tenant-user');
 
     const result = runRoleGuard('tenants');
 

@@ -19,7 +19,7 @@
       "text": "Files",
       "materialSymbol": "upload_file",
       "routerPath": "files",
-      "viewDescription": "The files view lets participants upload and manage their files, review sharing state, inspect agreement history, and download contracted remote data."
+      "viewDescription": "The files view lets tenant users upload files under an existing contract definition, review sharing state, inspect agreement history, and download contracted remote data."
     },
     {
       "text": "Explore",

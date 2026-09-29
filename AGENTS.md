@@ -23,10 +23,10 @@ Angular 21 (standalone components, lazy-loaded routes) dashboard for Eclipse Dat
 
 - Entrypoint: `src/main.ts` → `bootstrapApplication(App, appConfig)`. Providers are assembled in `src/app/app.config.ts`, not via NgModules.
 - Views are **lazy-loaded** from `src/app/app.routes.ts`. Library EDC views come from `@eclipse-edc/dashboard-core/<feature>` (home, assets, policies, contract-definitions, contract/transfer, catalog); custom code lives under `src/participant-view/` (files, explore, partners) and `src/operator-view/` (tenants, open-registrations).
-- **Two roles**: `participant` (EDC views) and `operator` (tenants/registrations), both get `home`.
+- **Three roles**: `tenant-admin` (partners and EDC views), `tenant-user` (files and explore), `operator` (tenants/registrations); all get `home`.
 - **`ACCESS_RULES` (`src/app/auth/access-rules.ts`) is the single source of truth** for both the route guard (`roleGuard`) and the shell menu filter. When adding a route you must keep three things in sync: `app.routes.ts`, `ACCESS_RULES`, and `public/config/app-config.json` menu items. Unknown route paths default to "allowed for any authenticated user" via `canAccess`, so forgetting ACCESS_RULES doesn't lock users out but does make a route appear in the menu for the wrong role — verify menu filtering.
 - `authGuard`/`authChildGuard`/`roleGuard` in `src/app/auth/guards/`; `/logout` is a side-effect-only route guarded by `logoutGuard`.
-- Login requires role-specific Keycloak token claims; missing claims reject login during callback (`participant` needs `participant_context_id` + `edc_connector_config`; `operator` needs `operator_id`).
+- Login requires role-specific Keycloak token claims; missing claims reject login during callback (both tenant roles need `participant_context_id` + `edc_connector_config`; `operator` needs `operator_id`).
 
 ## Runtime config pattern
 
@@ -47,7 +47,7 @@ Angular 21 (standalone components, lazy-loaded routes) dashboard for Eclipse Dat
 ## Dev environment (see README for full details)
 
 - Requires Keycloak SSO. Dev manifests under `ops/keycloak/` (`kubectl apply -k ops/keycloak/overlays/gateway`). Add `127.0.0.1 keycloak.jad.localhost` to your hosts file. Other dev services live on `*.jad.localhost` and are proxied in-cluster (jwtlet, EDC proxy, file-sharing).
-- Participant tokens come from jwtlet (Kubernetes service accounts / token API). `create-edc-connector-config.sh` provisions participant users/tokens; `ops/keycloakagent/` (Python) keeps Redline participants in sync with Keycloak every 60s. Changes here are only create/update — nothing is ever deleted.
+- Participant tokens come from jwtlet (Kubernetes service accounts / token API). `create-edc-connector-config.sh` provisions participant users/tokens; `ops/keycloakagent/` (Python) keeps two users per Redline participant in sync with Keycloak every 60s. Changes here are only create/update — nothing is ever deleted. Both roles currently share one EDC proxy service-account jwtlet mapping, so per-role backend scopes require separate proxy/token identities.
 - `ops/` also holds Keycloak config; keep manifest/shell-script and README in sync when touching auth/identity flows.
 
 ## Keep in sync

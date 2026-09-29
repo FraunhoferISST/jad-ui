@@ -11,27 +11,42 @@ describe('canAccess', () => {
 
   it('allows role-agnostic paths (logout) for any authenticated role', () => {
     expect(canAccess('logout', 'operator')).toBe(true);
-    expect(canAccess('logout', 'participant')).toBe(true);
+    expect(canAccess('logout', 'tenant-admin')).toBe(true);
+    expect(canAccess('logout', 'tenant-user')).toBe(true);
   });
 
   it('allows unknown paths for any authenticated role (fail-open by design)', () => {
     expect(canAccess('newly-added-route', 'operator')).toBe(true);
-    expect(canAccess('newly-added-route', 'participant')).toBe(true);
+    expect(canAccess('newly-added-route', 'tenant-admin')).toBe(true);
+    expect(canAccess('newly-added-route', 'tenant-user')).toBe(true);
   });
 
   it('restricts operator-only routes to the operator role', () => {
     expect(canAccess('tenants', 'operator')).toBe(true);
-    expect(canAccess('tenants', 'participant')).toBe(false);
+    expect(canAccess('tenants', 'tenant-admin')).toBe(false);
+    expect(canAccess('tenants', 'tenant-user')).toBe(false);
   });
 
-  it('restricts participant-only routes to the participant role', () => {
-    expect(canAccess('catalog', 'participant')).toBe(true);
-    expect(canAccess('catalog', 'operator')).toBe(false);
+  it('restricts dashboard and partner routes to tenant-admin', () => {
+    for (const path of ['catalog', 'assets', 'policies', 'contract-definitions', 'contracts', 'transfer-history', 'partners']) {
+      expect(canAccess(path, 'tenant-admin')).toBe(true);
+      expect(canAccess(path, 'tenant-user')).toBe(false);
+      expect(canAccess(path, 'operator')).toBe(false);
+    }
   });
 
-  it('allows the home route for both roles', () => {
+  it('restricts file and explore routes to tenant-user', () => {
+    for (const path of ['files', 'explore']) {
+      expect(canAccess(path, 'tenant-user')).toBe(true);
+      expect(canAccess(path, 'tenant-admin')).toBe(false);
+      expect(canAccess(path, 'operator')).toBe(false);
+    }
+  });
+
+  it('allows the home route for all roles', () => {
     expect(canAccess('home', 'operator')).toBe(true);
-    expect(canAccess('home', 'participant')).toBe(true);
+    expect(canAccess('home', 'tenant-admin')).toBe(true);
+    expect(canAccess('home', 'tenant-user')).toBe(true);
   });
 
   it('denies a role that is not in a route allow-list', () => {

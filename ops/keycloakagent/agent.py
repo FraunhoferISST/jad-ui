@@ -2,7 +2,7 @@
 """
 keycloakagent
 
-Syncs Redline participants into Keycloak participant users by polling the
+Syncs Redline participants into Keycloak tenant users by polling the
 Redline UI API on a fixed interval (instead of reacting to NATS events).
 
 For every participant discovered in Redline it:
@@ -14,8 +14,8 @@ For every participant discovered in Redline it:
      participant context id,
   3. upserts the jwtlet mapping for the EDC proxy service account
      (mandatory: it grants the proxy its participant-scoped tokens),
-  4. creates or updates the Keycloak participant user with its connector
-     config (DID, protocol URL, management URL) and the `participant` role.
+  4. creates or updates the tenant-user and tenant-admin accounts with their
+     shared connector config (DID, protocol URL, management URL).
 
 Only create/update is performed; users absent from Redline are never removed.
 
@@ -88,9 +88,8 @@ class Config:
         self.keycloak_admin_password = os.environ.get(
             "KEYCLOAK_ADMIN_PASSWORD", "admin-dev-change-me"
         )
-        self.keycloak_participant_role = os.environ.get(
-            "KEYCLOAK_PARTICIPANT_ROLE", "participant"
-        )
+        self.keycloak_user_role = os.environ.get("KEYCLOAK_USER_ROLE", "tenant-user")
+        self.keycloak_admin_role = os.environ.get("KEYCLOAK_TENANT_ADMIN_ROLE", "tenant-admin")
 
         # EDC proxy / JAD
         self.edc_proxy_base_url = os.environ.get(
@@ -281,14 +280,23 @@ def get_keycloak_admin_token(session):
     return token
 
 
-def get_participant_role(session, admin_token):
-    url = _keycloak_admin_url(f"/roles/{CONFIG.keycloak_participant_role}")
+def get_role(session, admin_token, role_name):
+    url = _keycloak_admin_url(f"/roles/{role_name}")
     resp = session.get(url, headers=_bearer(admin_token), timeout=30)
+    if resp.status_code == 404:
+        created = session.post(
+            _keycloak_admin_url("/roles"),
+            headers={**_bearer(admin_token), "Content-Type": "application/json"},
+            json={"name": role_name}, timeout=30,
+        )
+        if created.status_code not in (201, 409):
+            created.raise_for_status()
+        resp = session.get(url, headers=_bearer(admin_token), timeout=30)
     resp.raise_for_status()
     role = resp.json()
-    if role.get("name") != CONFIG.keycloak_participant_role:
+    if role.get("name") != role_name:
         raise RuntimeError(
-            f"role '{CONFIG.keycloak_participant_role}' not resolvable in "
+            f"role '{role_name}' not resolvable in "
             f"realm '{CONFIG.keycloak_realm}'"
         )
     return role
@@ -319,12 +327,10 @@ def build_connector_config(participant_context_id, did, dsp, connector_name):
 
 
 def sync_keycloak_user(
-    session, admin_token, role, participant_context_id, did, dsp, friendly_name
+    session, admin_token, role, username, password, participant_context_id, did, dsp, friendly_name
 ):
     connector_name = did_connector_name(did)
-    username = connector_name
-    password = connector_name
-    participant_email = f"{connector_name}@participants.jad.local"
+    participant_email = f"{username}@participants.jad.local"
 
     connector_config = build_connector_config(
         participant_context_id, did, dsp, connector_name
@@ -369,7 +375,7 @@ def sync_keycloak_user(
             )
         location = resp.headers.get("Location", "")
         user_id = location.rstrip("/").split("/")[-1]
-        log.info("created participant user %s (%s)", username, participant_context_id)
+        log.info("created tenant user %s (%s)", username, participant_context_id)
     else:
         resp = session.put(
             f"{users_url}/{user_id}", headers=headers_json,
@@ -379,7 +385,7 @@ def sync_keycloak_user(
             raise RuntimeError(
                 f"failed to update user {username}: status {resp.status_code}"
             )
-        log.info("updated participant user %s (%s)", username, participant_context_id)
+        log.info("updated tenant user %s (%s)", username, participant_context_id)
 
     # Persist attributes separately so they are not overwritten by credentials.
     attr_resp = session.put(
@@ -392,17 +398,27 @@ def sync_keycloak_user(
             f"status {attr_resp.status_code}"
         )
 
+    mappings_url = f"{users_url}/{user_id}/role-mappings/realm"
+    existing_roles = session.get(mappings_url, headers=_bearer(admin_token), timeout=30)
+    existing_roles.raise_for_status()
     role_resp = session.post(
-        f"{users_url}/{user_id}/role-mappings/realm",
+        mappings_url,
         headers=headers_json,
         json=[role],
         timeout=30,
     )
     if role_resp.status_code != 204:
-        log.warning(
-            "failed to assign role '%s' to %s: status %s",
-            CONFIG.keycloak_participant_role, username, role_resp.status_code,
-        )
+        raise RuntimeError(f"failed to assign role '{role['name']}' to {username}: {role_resp.status_code}")
+
+    stale_roles = [
+        assigned for assigned in existing_roles.json()
+        if assigned.get("name") in ("participant", CONFIG.keycloak_user_role, CONFIG.keycloak_admin_role)
+        and assigned.get("name") != role["name"]
+    ]
+    if stale_roles:
+        remove = session.delete(mappings_url, headers=headers_json, json=stale_roles, timeout=30)
+        if remove.status_code != 204:
+            raise RuntimeError(f"failed to remove obsolete roles for {username}: {remove.status_code}")
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +428,8 @@ def sync_keycloak_user(
 def sync_once(session):
     subject_token = read_subject_token()
     admin_token = get_keycloak_admin_token(session)
-    role = get_participant_role(session, admin_token)
+    user_role = get_role(session, admin_token, CONFIG.keycloak_user_role)
+    admin_role = get_role(session, admin_token, CONFIG.keycloak_admin_role)
 
     participants = list_redline_participants(session)
     if not participants:
@@ -439,8 +456,13 @@ def sync_once(session):
             )
 
             upsert_jwtlet_mapping(session, subject_token, participant_context_id)
+            username = did_connector_name(did)
             sync_keycloak_user(
-                session, admin_token, role,
+                session, admin_token, user_role, username, username,
+                participant_context_id, did, dsp, friendly_name,
+            )
+            sync_keycloak_user(
+                session, admin_token, admin_role, f"{username}-admin", "admin",
                 participant_context_id, did, dsp, friendly_name,
             )
         except Exception:

@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { AUTH_PROVIDER, AuthSession, isRole, Role } from './auth.types';
+import { AUTH_PROVIDER, AuthSession, isRole, isTenantRole, Role } from './auth.types';
 
 /**
  * Consumer-facing facade for authentication.
@@ -129,11 +129,11 @@ export class AuthService {
         return null;
       }
 
-      if (session.user.role === 'participant' && !session.user.participantContextId) {
+      if (isTenantRole(session.user.role) && !session.user.participantContextId) {
         return null;
       }
 
-      if (session.user.role === 'participant' && !session.user.participantEdcConfig) {
+      if (isTenantRole(session.user.role) && !session.user.participantEdcConfig) {
         return null;
       }
 

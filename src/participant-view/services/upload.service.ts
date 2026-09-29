@@ -1,270 +1,129 @@
 import { inject, Injectable } from '@angular/core';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
-import {
-    AssetInput,
-    ContractDefinitionInput, CriterionInput,
-    EdcConnectorClientError,
-    EdcConnectorClientErrorType,
-    PolicyBuilder,
-    PolicyDefinitionInput
-} from '@think-it-labs/edc-connector-client';
+import { AssetInput, ContractDefinitionInput, CriterionInput } from '@think-it-labs/edc-connector-client';
 
 import { asString } from '../utils/cast.utils';
-import { PARTNER_ACCESS_EXPRESSION } from '../utils/policy.utils';
-import { FileSharingApiService } from './file-sharing-api.service';
 import { ExtendedEdcClient } from '../models/edc.model';
-
-
-interface UploadResourceIds {
-  uploadMarker: string;
-  assetId: string;
-  policyId: string;
-  contractDefinitionId: string;
-}
+import { FileSharingApiService } from './file-sharing-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class UploadService {
   private readonly fileSharing = inject(FileSharingApiService);
   private readonly edcClientService = inject(EdcClientService);
 
-  async uploadFile(
-    file: File,
-    partnerIds: string[],
-  ): Promise<void> {
-    const ids = this.createResourceIds();
-    const normalizedPartnerIds = [...new Set(partnerIds.filter(partnerId => partnerId.trim().length > 0))];
+  async uploadFile(file: File, contractDefinitionId: string): Promise<void> {
+    if (!contractDefinitionId) {
+      throw new Error('Select a contract definition before uploading.');
+    }
 
+    const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
+    // Resolve the definition before storing anything; its policies are owned by the admin.
+    await client.management.contractDefinitions.get(contractDefinitionId);
+
+    const uid = crypto.randomUUID();
+    const uploadMarker = `upload-${uid}`;
+    const assetId = `asset-${uid}`;
     const formData = new FormData();
-
-    const metadata = {
+    formData.append('metadata', JSON.stringify({
       size: file.size,
       type: file.type,
-      assetId: ids.assetId,
+      assetId,
       originalFilename: file.name,
-      uploadMarker: ids.uploadMarker,
-      partnerIds: normalizedPartnerIds,
+      uploadMarker,
       origin: 'owned',
-      policyId: ids.policyId,
-      contractDefinitionId: ids.contractDefinitionId,
-    };
-
-    formData.append( 'metadata', JSON.stringify(metadata));
+      contractDefinitionId,
+    }));
     formData.append('file', file, file.name);
 
     await this.fileSharing.uploadFile(formData);
 
-    const uploadedFile = await this.resolveUploadedFile(ids.uploadMarker, file.name);
-    const fileId = uploadedFile.id;
-    if (!fileId) {
-      throw new Error('Uploaded file could not be resolved from file-sharing storage.');
-    }
-
-    const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
-    let policyCreated = false;
-    let assetCreated = false;
-    let contractDefinitionCreated = false;
-
+    let fileId: string | undefined;
+    let assetCreateAttempted = false;
+    let definitionUpdateAttempted = false;
     try {
-      await this.ensurePartnerAccessExpression(client);
+      fileId = (await this.resolveUploadedFile(uploadMarker, file.name)).id;
+      if (!fileId) {
+        throw new Error('Uploaded file could not be resolved from file-sharing storage.');
+      }
 
-      const policyInput = this.createPolicyDefinitionInput(ids.policyId, normalizedPartnerIds);
-      await client.management.policyDefinitions.create(policyInput);
-      policyCreated = true;
-
-      const assetInput = this.createAssetInput({
-        assetId: ids.assetId,
-        file,
-        fileId,
-        partnerIds: normalizedPartnerIds,
-      });
+      const assetInput: AssetInput = {
+        '@type': 'Asset',
+        '@id': assetId,
+        properties: {
+          name: file.name,
+          contenttype: file.type || 'application/octet-stream',
+          fileId,
+          originalFilename: file.name,
+          size: String(file.size),
+        },
+        dataplaneMetadata: {
+          '@type': 'DataplaneMetadata',
+          properties: { fileId },
+        },
+      };
+      assetCreateAttempted = true;
       await client.management.assets.create(assetInput);
-      assetCreated = true;
 
-      const contractDefinitionInput = this.createContractDefinitionInput(
-        ids.contractDefinitionId,
-        ids.policyId,
-        ids.assetId,
-      );
-      await client.management.contractDefinitions.create(contractDefinitionInput);
-      contractDefinitionCreated = true;
+      // Fetch again immediately before updating so edits made after selection are preserved.
+      const definition = await client.management.contractDefinitions.get(contractDefinitionId);
+      const assetsSelector: CriterionInput[] = definition.assetsSelector.map(criterion => ({
+        '@type': 'Criterion',
+        operandLeft: criterion.operandLeft,
+        operator: criterion.operator,
+        operandRight: criterion.operandRight,
+      }));
+      assetsSelector.push({ '@type': 'Criterion', operandLeft: 'id', operator: '=', operandRight: assetId });
+      const input: ContractDefinitionInput = {
+        '@type': 'ContractDefinition',
+        '@id': definition.id,
+        accessPolicyId: definition.accessPolicyId,
+        contractPolicyId: definition.contractPolicyId,
+        assetsSelector,
+      };
+      definitionUpdateAttempted = true;
+      await client.management.contractDefinitions.update(input);
     } catch (error) {
-      await this.rollbackFailedUpload(client, {
-        fileId,
-        assetId: ids.assetId,
-        policyId: ids.policyId,
-        contractDefinitionId: ids.contractDefinitionId,
-        policyCreated,
-        assetCreated,
-        contractDefinitionCreated,
-      });
-
+      if (assetCreateAttempted) {
+        if (definitionUpdateAttempted) {
+          // A failed response to an update may still mean the definition changed.
+          // Check before deleting an asset that might already be referenced.
+          const updatedDefinition = await client.management.contractDefinitions
+            .get(contractDefinitionId).catch(() => null);
+          if (!updatedDefinition || updatedDefinition.assetsSelector.some(criterion =>
+            criterion.operandLeft === 'id' && criterion.operandRight === assetId,
+          )) {
+            throw error;
+          }
+        }
+        try {
+          await client.management.assets.delete(assetId);
+        } catch {
+          // If the asset still exists, retain its backing file.
+          throw error;
+        }
+      }
+      // Resolution can time out after the storage accepted the upload. Make one
+      // final best-effort lookup before cleanup so the stored file is not orphaned.
+      if (!fileId) {
+        fileId = (await this.fileSharing.listFiles().catch(() => []))
+          .find(file => asString(file.metadata?.['uploadMarker']) === uploadMarker)?.id;
+      }
+      if (fileId) {
+        await this.fileSharing.deleteFile(fileId).catch(() => undefined);
+      }
       throw error;
     }
   }
 
-  private createResourceIds(): UploadResourceIds {
-    const uid = crypto.randomUUID();
-    return {
-      uploadMarker: `upload-${uid}`,
-      assetId: `asset-${uid}`,
-      policyId: `policy-${uid}`,
-      contractDefinitionId: `contract-definition-${uid}`,
-    };
-  }
-
-  private async ensurePartnerAccessExpression(client: ExtendedEdcClient): Promise<void> {
-    try {
-      await client.celExpressions.create([PARTNER_ACCESS_EXPRESSION]);
-    } catch (error) {
-      if (this.isDuplicateError(error)) {
-        return;
-      }
-
-      const message = error instanceof Error ? error.message : 'Unknown policy function error.';
-      throw new Error(`Failed to create policy expression: ${message}`);
-    }
-  }
-
-  private isDuplicateError(error: unknown): boolean {
-    if (!(error instanceof EdcConnectorClientError)) {
-      return false;
-    }
-
-    if (error.type === EdcConnectorClientErrorType.Duplicate) {
-      return true;
-    }
-
-    return (error.message ?? '').toLowerCase().includes('already');
-  }
-
-  private createPolicyDefinitionInput(
-    policyId: string,
-    partnerIds: string[],
-  ): PolicyDefinitionInput {
-    const policyRaw: Record<string, unknown> = { '@type': 'Set' };
-
-    if (partnerIds.length === 0) {
-      policyRaw['permission'] = [{ action: 'use' }];
-    } else {
-      policyRaw['permission'] = [
-        {
-          action: 'use',
-          constraint: [
-            {
-              leftOperand: PARTNER_ACCESS_EXPRESSION.leftOperand,
-              operator: partnerIds.length > 1 ? 'isAnyOf' : 'eq',
-              rightOperand: partnerIds.length > 1 ? partnerIds : partnerIds[0],
-            },
-          ],
-        },
-      ];
-    }
-
-    return {
-      '@type': 'PolicyDefinition',
-      '@id': policyId,
-      id: policyId,
-      policy: new PolicyBuilder().type('Set').raw(policyRaw).build(),
-    };
-  }
-
-  private createAssetInput(params: {
-    assetId: string;
-    file: File;
-    fileId: string;
-    partnerIds: string[];
-  }): AssetInput {
-    return {
-      '@type': 'Asset',
-      '@id': params.assetId,
-      properties: {
-        name: params.file.name,
-        contenttype: params.file.type || 'application/octet-stream',
-        'fileId': params.fileId,
-        'originalFilename': params.file.name,
-        'size': String(params.file.size),
-      },
-      privateProperties: {
-        partnerIds: params.partnerIds,
-      },
-      dataplaneMetadata: {
-        '@type': 'DataplaneMetadata',
-        properties: {
-          fileId: params.fileId,
-        },
-      },
-    };
-  }
-
-  private createContractDefinitionInput(
-    contractDefinitionId: string,
-    policyId: string,
-    assetId: string,
-  ): ContractDefinitionInput {
-    return {
-      '@type': 'ContractDefinition',
-      '@id': contractDefinitionId,
-      accessPolicyId: policyId,
-      contractPolicyId: policyId,
-      assetsSelector: [{'@type': 'Criterion', operandLeft: 'id', operator: '=', operandRight: assetId } as CriterionInput],
-    };
-  }
-
-  private async resolveUploadedFile(
-    uploadMarker: string,
-    originalFilename: string,
-  ): Promise<{ id?: string; metadata?: Record<string, unknown> }> {
-    const attempts = 5;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
+  private async resolveUploadedFile(uploadMarker: string, originalFilename: string): Promise<{ id?: string }> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const files = await this.fileSharing.listFiles();
-      const uploaded = files.find(file => {
-        const metadata = file.metadata ?? {};
-        const marker = asString(metadata['uploadMarker']);
-        return marker === uploadMarker;
-      });
-
+      const uploaded = files.find(file => asString(file.metadata?.['uploadMarker']) === uploadMarker);
       if (uploaded?.id) {
         return uploaded;
       }
-
-      await this.delay((attempt + 1) * 200);
+      await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 200));
     }
-
     throw new Error(`Could not resolve uploaded file id for "${originalFilename}".`);
-  }
-
-  private async rollbackFailedUpload(
-    client: ExtendedEdcClient,
-    params: {
-      fileId: string;
-      assetId: string;
-      policyId: string;
-      contractDefinitionId: string;
-      policyCreated: boolean;
-      assetCreated: boolean;
-      contractDefinitionCreated: boolean;
-    },
-  ): Promise<void> {
-    if (params.contractDefinitionCreated) {
-      await client.management.contractDefinitions
-        .delete(params.contractDefinitionId)
-        .catch(() => undefined);
-    }
-
-    if (params.assetCreated) {
-      await client.management.assets.delete(params.assetId).catch(() => undefined);
-    }
-
-    if (params.policyCreated) {
-      await client.management.policyDefinitions.delete(params.policyId).catch(() => undefined);
-    }
-
-    await this.fileSharing.deleteFile(params.fileId).catch(() => undefined);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => {
-      setTimeout(resolve, ms);
-    });
   }
 }

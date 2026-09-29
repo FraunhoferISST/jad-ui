@@ -12,16 +12,16 @@ import { Role } from './auth.types';
  * `public/config/app-config.json`.
  */
 export const ACCESS_RULES: Record<string, Role[]> = {
-  home: ['operator', 'participant'],
-  catalog: ['participant'],
-  assets: ['participant'],
-  files: ['participant'],
-  explore: ['participant'],
-  partners: ['participant'],
-  policies: ['participant'],
-  'contract-definitions': ['participant'],
-  contracts: ['participant'],
-  'transfer-history': ['participant'],
+  home: ['operator', 'tenant-admin', 'tenant-user'],
+  catalog: ['tenant-admin'],
+  assets: ['tenant-admin'],
+  files: ['tenant-user'],
+  explore: ['tenant-user'],
+  partners: ['tenant-admin'],
+  policies: ['tenant-admin'],
+  'contract-definitions': ['tenant-admin'],
+  contracts: ['tenant-admin'],
+  'transfer-history': ['tenant-admin'],
   tenants: ['operator'],
   'open-registrations': ['operator'],
 };

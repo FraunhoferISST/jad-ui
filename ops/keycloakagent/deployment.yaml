@@ -52,8 +52,10 @@ spec:
               value: master
             - name: KEYCLOAK_ADMIN_CLIENT_ID
               value: admin-cli
-            - name: KEYCLOAK_PARTICIPANT_ROLE
-              value: participant
+            - name: KEYCLOAK_USER_ROLE
+              value: tenant-user
+            - name: KEYCLOAK_TENANT_ADMIN_ROLE
+              value: tenant-admin
             - name: EDC_PROXY_BASE_URL
               value: http://edc-proxy.localhost/proxy
             - name: JAD_BASE_URL

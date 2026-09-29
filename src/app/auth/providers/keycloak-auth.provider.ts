@@ -7,6 +7,7 @@ import {
   AuthUser,
   isEdcConnectorConfig,
   isRole,
+  isTenantRole,
   Role,
 } from '../auth.types';
 import { EdcConfig } from '@eclipse-edc/dashboard-core';
@@ -157,7 +158,7 @@ export class KeycloakAuthProvider implements AuthProvider {
       displayName: claims.name,
     };
 
-    if (role === 'participant') {
+    if (isTenantRole(role)) {
       const participantContextId = claims.participant_context_id?.trim();
       if (!participantContextId) {
         throw new Error('Missing required token claim: participant_context_id');
@@ -201,7 +202,7 @@ export class KeycloakAuthProvider implements AuthProvider {
     const applicationRoles = roles.filter(isRole);
 
     if (applicationRoles.length !== 1) {
-      throw new Error('Token must contain exactly one application role (operator or participant).');
+      throw new Error('Token must contain exactly one application role (operator, tenant-admin or tenant-user).');
     }
 
     return applicationRoles[0];

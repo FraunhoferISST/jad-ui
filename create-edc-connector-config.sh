@@ -21,7 +21,8 @@ KEYCLOAK_ADMIN_REALM=${KEYCLOAK_ADMIN_REALM:-master}
 KEYCLOAK_ADMIN_CLIENT_ID=${KEYCLOAK_ADMIN_CLIENT_ID:-admin-cli}
 KEYCLOAK_ADMIN_USERNAME=${KEYCLOAK_ADMIN_USERNAME:-admin}
 KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin-dev-change-me}
-KEYCLOAK_PARTICIPANT_ROLE=${KEYCLOAK_PARTICIPANT_ROLE:-participant}
+KEYCLOAK_USER_ROLE=${KEYCLOAK_USER_ROLE:-tenant-user}
+KEYCLOAK_TENANT_ADMIN_ROLE=${KEYCLOAK_TENANT_ADMIN_ROLE:-tenant-admin}
 
 PF_PID=""
 
@@ -83,14 +84,27 @@ if [[ -z "${KC_ADMIN_TOKEN}" || "${KC_ADMIN_TOKEN}" == "null" ]]; then
   exit 1
 fi
 
-KC_ROLE=$(curl -sS \
-  -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" \
-  "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/roles/${KEYCLOAK_PARTICIPANT_ROLE}")
-
-if [[ "$(echo "${KC_ROLE}" | jq -r '.name // empty')" != "${KEYCLOAK_PARTICIPANT_ROLE}" ]]; then
-  echo "Failed to resolve Keycloak realm role '${KEYCLOAK_PARTICIPANT_ROLE}'." >&2
-  exit 1
-fi
+for role_name in "${KEYCLOAK_USER_ROLE}" "${KEYCLOAK_TENANT_ADMIN_ROLE}"; do
+  role=$(curl -sS -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" \
+    "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/roles/${role_name}")
+  if [[ "$(jq -r '.name // empty' <<<"${role}")" != "${role_name}" ]]; then
+    create_role_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+      "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/roles" \
+      -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" -H 'Content-Type: application/json' \
+      --data "$(jq -n --arg name "${role_name}" '{name: $name}')")
+    if [[ "${create_role_status}" != "201" && "${create_role_status}" != "409" ]]; then
+      echo "Failed to create Keycloak realm role '${role_name}' (status ${create_role_status})." >&2
+      exit 1
+    fi
+    role=$(curl -sS -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" \
+      "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/roles/${role_name}")
+  fi
+  if [[ "$(jq -r '.name // empty' <<<"${role}")" != "${role_name}" ]]; then
+    echo "Failed to resolve Keycloak realm role '${role_name}'." >&2
+    exit 1
+  fi
+  if [[ "${role_name}" == "${KEYCLOAK_USER_ROLE}" ]]; then KC_USER_ROLE_JSON=${role}; else KC_ADMIN_ROLE_JSON=${role}; fi
+done
 
 echo "Syncing participant users into Keycloak realm '${KEYCLOAK_REALM}'..."
 
@@ -199,9 +213,19 @@ curl -sS -L "${jwtlet_mappings_url}" -H "Authorization: Bearer ${ST}" \
       }
     }')
 
-  username="${connector_name}"
-  password="${connector_name}"
-  participant_email="${connector_name}@participants.jad.local"
+  for account_type in user admin; do
+    if [[ "${account_type}" == admin ]]; then
+      username="${connector_name}-admin"
+      password=admin
+      target_role="${KEYCLOAK_TENANT_ADMIN_ROLE}"
+      role_json="${KC_ADMIN_ROLE_JSON}"
+    else
+      username="${connector_name}"
+      password="${connector_name}"
+      target_role="${KEYCLOAK_USER_ROLE}"
+      role_json="${KC_USER_ROLE_JSON}"
+    fi
+    participant_email="${username}@participants.jad.local"
 
   existing_user=$(curl -sS \
     -G "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/users" \
@@ -299,14 +323,28 @@ curl -sS -L "${jwtlet_mappings_url}" -H "Authorization: Bearer ${ST}" \
     continue
   fi
 
+  roles_url="${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/users/${user_id}/role-mappings/realm"
   role_status=$(curl -sS -o /dev/null -w '%{http_code}' \
     -X POST "${KEYCLOAK_BASE_URL}/admin/realms/${KEYCLOAK_REALM}/users/${user_id}/role-mappings/realm" \
     -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" \
     -H 'Content-Type: application/json' \
-    --data "[$KC_ROLE]")
+    --data "[${role_json}]")
 
   if [[ "${role_status}" != "204" ]]; then
-    echo "Warning: failed to assign role '${KEYCLOAK_PARTICIPANT_ROLE}' to ${username} (status ${role_status})." >&2
+    echo "Warning: failed to assign role '${target_role}' to ${username} (status ${role_status})." >&2
+    continue
+  fi
+
+  obsolete_roles=$(curl -sS "${roles_url}" -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" \
+    | jq -c --arg wanted "${target_role}" --arg user "${KEYCLOAK_USER_ROLE}" --arg admin "${KEYCLOAK_TENANT_ADMIN_ROLE}" \
+      '[.[] | select((.name == "participant" or .name == $user or .name == $admin) and .name != $wanted)]')
+  if [[ "${obsolete_roles}" != "[]" ]]; then
+    remove_status=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "${roles_url}" \
+      -H "Authorization: Bearer ${KC_ADMIN_TOKEN}" -H 'Content-Type: application/json' --data "${obsolete_roles}")
+    if [[ "${remove_status}" != "204" ]]; then
+      echo "Failed to remove obsolete roles for ${username} (status ${remove_status})." >&2
+      continue
+    fi
   fi
 
   verify_user=$(curl -sS \
@@ -319,6 +357,7 @@ curl -sS -L "${jwtlet_mappings_url}" -H "Authorization: Bearer ${ST}" \
   if [[ -z "${verified_participant_context}" || -z "${verified_connector_config}" ]]; then
     echo "Warning: attributes missing after update for ${username}. Check realm user-profile unmanaged attributes policy." >&2
   fi
+  done
 done
 
 echo "Participant user sync complete."

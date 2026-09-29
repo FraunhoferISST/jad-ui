@@ -5,10 +5,10 @@ import { EdcConfig } from '@eclipse-edc/dashboard-core';
  * The roles supported by the application.
  *
  * - `operator`: may access the home view and the operator-only views (tenants).
- * - `participant`: may access the home view and all other views except the
- *   operator views.
+ * - `tenant-admin`: may manage partners and EDC dashboard resources.
+ * - `tenant-user`: may upload files and explore shared files.
  */
-export type Role = 'operator' | 'participant';
+export type Role = 'operator' | 'tenant-admin' | 'tenant-user';
 
 /**
  * Runtime list of the valid {@link Role} values.
@@ -17,7 +17,11 @@ export type Role = 'operator' | 'participant';
  * stay in sync. The `satisfies` clause makes the compiler flag this list if a
  * member is ever added to or removed from the `Role` union.
  */
-export const ROLES = ['operator', 'participant'] as const satisfies readonly Role[];
+export const ROLES = ['operator', 'tenant-admin', 'tenant-user'] as const satisfies readonly Role[];
+
+export function isTenantRole(role: Role | null): role is 'tenant-admin' | 'tenant-user' {
+  return role === 'tenant-admin' || role === 'tenant-user';
+}
 
 /**
  * Runtime type guard for {@link Role}. Used when validating untrusted input
