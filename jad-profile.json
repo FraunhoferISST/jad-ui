@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2019-09/schema",
   "$id": "urn:jad:policy-profile:v1",
   "title": "JAD ODRL Policy Profile v1",
-  "description": "Self-contained authoring schema for compact JSON-LD ODRL policies and EDC PolicyDefinition requests. Allows EDC's built-in inForceDate permission constraint and the MembershipCredential and ManufacturerCredential evaluators registered by JAD's Bruno collection. This schema does not install evaluators, issue credentials, or enforce runtime evaluation scopes.",
-  "$comment": "Based on the checked JAD 1.0.0-SNAPSHOT configuration and Eclipse EDC Connector sources. Only inForceDate was found as a built-in Java atomic constraint evaluator; CEL helper functions are not automatically policy left operands. Credential constraints deliberately use the eq/active authoring convention: the Bruno expressions ignore this.operator and this.rightOperand, so other comparisons would misleadingly imply different semantics. Use this schema with EDC's base API validation and policy validation/evaluation-plan APIs. It validates compact property names, not arbitrary expanded JSON-LD or context remappings. The URN is a local profile identifier, not an officially registered dataspace profile. Sources: ../jad/requests/EDC-V Onboarding/EDC-V Management/Prepare Consumer Participant/; https://github.com/eclipse-edc/Connector/blob/main/core/control-plane/lib/control-plane-lib/src/main/java/org/eclipse/edc/connector/controlplane/policy/contract/ContractExpiryCheckFunction.java; https://github.com/eclipse-edc/Connector/blob/main/core/common/cel-core/src/main/java/org/eclipse/edc/policy/cel/CelPolicyCoreExtension.java.",
+  "description": "Self-contained authoring schema for compact JSON-LD ODRL policies and EDC PolicyDefinition requests. Allows EDC's built-in inForceDate permission constraint, the MembershipCredential and ManufacturerCredential evaluators registered by JAD's Bruno collection, and the CounterPartyId evaluator registered by the historical JAD UI upload service. This schema does not install evaluators, issue credentials, or enforce runtime evaluation scopes.",
+  "$comment": "Based on the checked JAD 1.0.0-SNAPSHOT configuration and Eclipse EDC Connector sources. Only inForceDate was found as a built-in Java atomic constraint evaluator; CEL helper functions are not automatically policy left operands. Credential constraints deliberately use the eq/active authoring convention: the Bruno expressions ignore this.operator and this.rightOperand, so other comparisons would misleadingly imply different semantics. Use this schema with EDC's base API validation and policy validation/evaluation-plan APIs. It validates compact property names, not arbitrary expanded JSON-LD or context remappings. The URN is a local profile identifier, not an officially registered dataspace profile. Sources: ../jad/requests/EDC-V Onboarding/EDC-V Management/Prepare Consumer Participant/; src/participant-view/utils/policy.utils.ts and src/participant-view/services/upload.service.ts at commit 82b5479, immediately before tenant-admin was introduced in 384a5bc; https://github.com/eclipse-edc/Connector/blob/main/core/control-plane/lib/control-plane-lib/src/main/java/org/eclipse/edc/connector/controlplane/policy/contract/ContractExpiryCheckFunction.java; https://github.com/eclipse-edc/Connector/blob/main/core/common/cel-core/src/main/java/org/eclipse/edc/policy/cel/CelPolicyCoreExtension.java.",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/PolicyDefinition" },
@@ -60,6 +60,41 @@
                   "operator": "lt",
                   "rightOperand": "contractAgreement+7d"
                 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "@type": "Set",
+      "profile": "urn:jad:policy-profile:v1",
+      "permission": [
+        {
+          "action": "use",
+          "constraint": [
+            {
+              "leftOperand": "CounterPartyId",
+              "operator": "eq",
+              "rightOperand": "did:web:partner.example:participant-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "@type": "Set",
+      "profile": "urn:jad:policy-profile:v1",
+      "permission": [
+        {
+          "action": "use",
+          "constraint": [
+            {
+              "leftOperand": "CounterPartyId",
+              "operator": "isAnyOf",
+              "rightOperand": [
+                "did:web:partner.example:participant-1",
+                "did:web:partner.example:participant-2"
               ]
             }
           ]
@@ -205,6 +240,7 @@
         { "$ref": "#/$defs/InForceDateConstraint" },
         { "$ref": "#/$defs/MembershipCredentialConstraint" },
         { "$ref": "#/$defs/ManufacturerCredentialConstraint" },
+        { "$ref": "#/$defs/CounterPartyIdConstraint" },
         { "$ref": "#/$defs/PermissionLogicalConstraint" }
       ]
     },
@@ -213,6 +249,7 @@
       "oneOf": [
         { "$ref": "#/$defs/MembershipCredentialConstraint" },
         { "$ref": "#/$defs/ManufacturerCredentialConstraint" },
+        { "$ref": "#/$defs/CounterPartyIdConstraint" },
         { "$ref": "#/$defs/CelLogicalConstraint" }
       ]
     },
@@ -289,6 +326,48 @@
       },
       "additionalProperties": false
     },
+    "CounterPartyIdConstraint": {
+      "title": "Allowed counterparty",
+      "description": "Matches the authenticated counterparty's ctx.agent.id against one participant identifier (eq) or a nonempty list of participant identifiers (isAnyOf). Use the authenticated agent identifier, typically its DID, not a display name or an unrelated database ID. The historical upload service registered cert-partner-access-policy-expression for catalog, contract.negotiation and transfer.process, not policy.monitor. The expression branches on rightOperand's type and ignores this.operator; this schema deliberately permits only the scalar eq and list isAnyOf conventions used by that service.",
+      "$comment": "CEL expression cert-partner-access-policy-expression, from src/participant-view/utils/policy.utils.ts at commit 82b5479: type(this.rightOperand) == list ? ctx.agent.id in this.rightOperand : ctx.agent.id == this.rightOperand. The pre-tenant-admin upload service ensured this expression existed, then created a PolicyDefinition, an Asset, and a ContractDefinition using the same policy ID for accessPolicyId and contractPolicyId. Schema registration does not register this CEL expression.",
+      "type": "object",
+      "required": ["leftOperand", "operator", "rightOperand"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "leftOperand": { "const": "CounterPartyId" },
+        "operator": {
+          "type": "string",
+          "enum": [
+            "eq",
+            "odrl:eq",
+            "http://www.w3.org/ns/odrl/2/eq",
+            "isAnyOf",
+            "odrl:isAnyOf",
+            "http://www.w3.org/ns/odrl/2/isAnyOf"
+          ]
+        },
+        "rightOperand": {
+          "oneOf": [
+            { "$ref": "#/$defs/Identifier" },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/Identifier" }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "operator": { "$ref": "#/$defs/ActiveOperator" } } },
+          "then": { "properties": { "rightOperand": { "type": "string" } } },
+          "else": { "properties": { "rightOperand": { "type": "array" } } }
+        }
+      ],
+      "additionalProperties": false
+    },
     "PermissionLogicalConstraint": {
       "title": "Permission constraint group",
       "description": "Exactly one of and, or or xone, recursively combining supported constraints. andSequence is intentionally excluded: EDC's checked JSON-LD-to-model transformer handles only and, or and xone.",
@@ -313,7 +392,7 @@
       "items": { "$ref": "#/$defs/PermissionConstraint" }
     },
     "CelLogicalConstraint": {
-      "title": "Credential constraint group",
+      "title": "CEL constraint group",
       "type": "object",
       "properties": {
         "@id": { "$ref": "#/$defs/Identifier" },
