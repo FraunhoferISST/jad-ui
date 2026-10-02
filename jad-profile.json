@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$id": "urn:jad:policy-profile:v1",
+  "title": "JAD ODRL Policy Profile v1",
+  "description": "Self-contained authoring schema for compact JSON-LD ODRL policies and EDC PolicyDefinition requests. Allows EDC's built-in inForceDate permission constraint and the MembershipCredential and ManufacturerCredential evaluators registered by JAD's Bruno collection. This schema does not install evaluators, issue credentials, or enforce runtime evaluation scopes.",
+  "$comment": "Based on the checked JAD 1.0.0-SNAPSHOT configuration and Eclipse EDC Connector sources. Only inForceDate was found as a built-in Java atomic constraint evaluator; CEL helper functions are not automatically policy left operands. Credential constraints deliberately use the eq/active authoring convention: the Bruno expressions ignore this.operator and this.rightOperand, so other comparisons would misleadingly imply different semantics. Use this schema with EDC's base API validation and policy validation/evaluation-plan APIs. It validates compact property names, not arbitrary expanded JSON-LD or context remappings. The URN is a local profile identifier, not an officially registered dataspace profile. Sources: ../jad/requests/EDC-V Onboarding/EDC-V Management/Prepare Consumer Participant/; https://github.com/eclipse-edc/Connector/blob/main/core/control-plane/lib/control-plane-lib/src/main/java/org/eclipse/edc/connector/controlplane/policy/contract/ContractExpiryCheckFunction.java; https://github.com/eclipse-edc/Connector/blob/main/core/common/cel-core/src/main/java/org/eclipse/edc/policy/cel/CelPolicyCoreExtension.java.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/PolicyDefinition" },
+    { "$ref": "#/$defs/Policy" }
+  ],
+  "examples": [
+    {
+      "@context": ["https://w3id.org/edc/connector/management/v2"],
+      "@type": "PolicyDefinition",
+      "@id": "jad-membership-policy",
+      "policy": {
+        "@type": "Set",
+        "profile": "urn:jad:policy-profile:v1",
+        "permission": [
+          {
+            "action": "use",
+            "constraint": [
+              {
+                "leftOperand": "MembershipCredential",
+                "operator": "eq",
+                "rightOperand": "active"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "@type": "Set",
+      "profile": "urn:jad:policy-profile:v1",
+      "permission": [
+        {
+          "action": "use",
+          "constraint": [
+            {
+              "and": [
+                {
+                  "leftOperand": "MembershipCredential",
+                  "operator": "eq",
+                  "rightOperand": "active"
+                },
+                {
+                  "leftOperand": "ManufacturerCredential",
+                  "operator": "eq",
+                  "rightOperand": "active"
+                },
+                {
+                  "leftOperand": "inForceDate",
+                  "operator": "gteq",
+                  "rightOperand": "contractAgreement+0s"
+                },
+                {
+                  "leftOperand": "inForceDate",
+                  "operator": "lt",
+                  "rightOperand": "contractAgreement+7d"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "Context": {
+      "description": "Supply the EDC management/v2 context for PolicyDefinition requests. A standalone policy needs the DSP ODRL profile and the EDC inForceDate term mapping when serialized as JSON-LD. Context interpretation remains the connector's responsibility.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "object" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "object" }
+            ]
+          }
+        }
+      ]
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "PolicyDefinition": {
+      "title": "EDC PolicyDefinition request",
+      "type": "object",
+      "required": ["@context", "@type", "policy"],
+      "properties": {
+        "@context": { "$ref": "#/$defs/Context" },
+        "@type": { "const": "PolicyDefinition" },
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "policy": {
+          "allOf": [
+            { "$ref": "#/$defs/Policy" },
+            {
+              "properties": { "@type": { "const": "Set" } },
+              "description": "EDC's v5 PolicyDefinition endpoint uses the v4 base schema, which requires Set. Offer and Agreement are supported only by the standalone policy branch."
+            }
+          ]
+        },
+        "privateProperties": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "Policy": {
+      "title": "ODRL policy",
+      "description": "Compact ODRL policy. Omitted rule collections permit an unconstrained Set. Use Agreement, not the Java model's CONTRACT name, for an ODRL agreement. Profile is optional so existing Bruno policies remain valid; when supplied, it identifies this JAD profile as a single string for EDC's profile-filtered schema validation.",
+      "type": "object",
+      "required": ["@type"],
+      "properties": {
+        "@context": { "$ref": "#/$defs/Context" },
+        "@type": { "enum": ["Set", "Offer", "Agreement"] },
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "profile": { "type": "string", "const": "urn:jad:policy-profile:v1" },
+        "target": { "$ref": "#/$defs/Identifier" },
+        "assigner": { "$ref": "#/$defs/Identifier" },
+        "assignee": { "$ref": "#/$defs/Identifier" },
+        "permission": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Permission" }
+        },
+        "prohibition": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Prohibition" }
+        },
+        "obligation": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Duty" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "@type": { "const": "Agreement" } } },
+          "then": { "required": ["@id", "target", "assigner", "assignee"] }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "UseAction": {
+      "title": "Use",
+      "description": "The action bound by EDC's CEL policy core to catalog, negotiation, transfer and monitoring. Other ODRL actions need their own runtime bindings.",
+      "type": "string",
+      "enum": ["use", "odrl:use", "http://www.w3.org/ns/odrl/2/use"]
+    },
+    "Permission": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Permission" },
+        "action": { "$ref": "#/$defs/UseAction" },
+        "constraint": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PermissionConstraint" }
+        },
+        "duty": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Duty" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Prohibition": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Prohibition" },
+        "action": { "$ref": "#/$defs/UseAction" },
+        "constraint": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CelConstraint" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Duty": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Duty" },
+        "action": { "$ref": "#/$defs/UseAction" },
+        "constraint": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CelConstraint" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PermissionConstraint": {
+      "oneOf": [
+        { "$ref": "#/$defs/InForceDateConstraint" },
+        { "$ref": "#/$defs/MembershipCredentialConstraint" },
+        { "$ref": "#/$defs/ManufacturerCredentialConstraint" },
+        { "$ref": "#/$defs/PermissionLogicalConstraint" }
+      ]
+    },
+    "CelConstraint": {
+      "description": "CEL binds Permission, Prohibition and Duty. The built-in inForceDate Java evaluator binds only Permission and is therefore excluded from prohibitions and duties, including their nested logical constraints.",
+      "oneOf": [
+        { "$ref": "#/$defs/MembershipCredentialConstraint" },
+        { "$ref": "#/$defs/ManufacturerCredentialConstraint" },
+        { "$ref": "#/$defs/CelLogicalConstraint" }
+      ]
+    },
+    "InForceDateConstraint": {
+      "title": "Contract validity date",
+      "description": "EDC built-in permission constraint: compares the current time against a fixed instant or the agreement signing time plus an offset. Evaluated in transfer.process and, if installed, policy.monitor; it is not a catalog or negotiation eligibility check.",
+      "type": "object",
+      "required": ["leftOperand", "operator", "rightOperand"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "leftOperand": {
+          "type": "string",
+          "enum": ["inForceDate", "edc:inForceDate", "https://w3id.org/edc/v0.0.1/ns/inForceDate"]
+        },
+        "operator": {
+          "type": "string",
+          "pattern": "^(odrl:|http://www\\.w3\\.org/ns/odrl/2/)?(eq|neq|gt|gteq|lt|lteq)$",
+          "examples": ["gteq", "lt"]
+        },
+        "rightOperand": { "$ref": "#/$defs/TimeBound" }
+      },
+      "additionalProperties": false
+    },
+    "TimeBound": {
+      "title": "Fixed or agreement-relative time",
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]((0[0-9]|1[0-3]):[0-5][0-9]|14:00))$",
+          "description": "Enable JSON Schema date-time format checking to reject impossible calendar dates. The pattern alone validates the timestamp's shape and field ranges.",
+          "examples": ["2026-10-01T00:00:00Z"]
+        },
+        {
+          "type": "string",
+          "pattern": "^contract[Aa]greement\\+-?[0-9]+[smhd]$",
+          "description": "The numeric offset must fit a Java signed 32-bit integer at runtime. Units are seconds, minutes, hours or days. Negative offsets use '+-'; ISO durations such as P7D are not accepted by this evaluator.",
+          "examples": ["contractAgreement+0s", "contractAgreement+7d", "contractAgreement+-5m"]
+        }
+      ]
+    },
+    "ActiveOperator": {
+      "type": "string",
+      "enum": ["eq", "odrl:eq", "http://www.w3.org/ns/odrl/2/eq"]
+    },
+    "MembershipCredentialConstraint": {
+      "title": "Active membership credential",
+      "description": "Requires a presented MembershipCredential with a subject whose membershipStartDate is before now. Bruno registers this evaluator for catalog, contract.negotiation and transfer.process, not policy.monitor. The active value is an authoring convention, not a credential status claim comparison. Credential trust, expiration and revocation checks are performed separately by DCP.",
+      "$comment": "Bruno CEL: ctx.agent.claims.vc.filter(c, c.type.exists(t, t == 'MembershipCredential')).exists(c, c.credentialSubject.exists(cs, timestamp(cs.membershipStartDate) < now))",
+      "type": "object",
+      "required": ["leftOperand", "operator", "rightOperand"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "leftOperand": { "const": "MembershipCredential" },
+        "operator": { "$ref": "#/$defs/ActiveOperator" },
+        "rightOperand": { "const": "active" }
+      },
+      "additionalProperties": false
+    },
+    "ManufacturerCredentialConstraint": {
+      "title": "Active manufacturer credential",
+      "description": "Requires a presented ManufacturerCredential with a subject whose since date is before now. Bruno registers this evaluator for catalog, contract.negotiation and transfer.process, not policy.monitor. It does not check contractVersion or part_types. The active value is an authoring convention, not a credential status claim comparison.",
+      "$comment": "Bruno CEL: ctx.agent.claims.vc.filter(c, c.type.exists(t, t == 'ManufacturerCredential')).exists(c, c.credentialSubject.exists(cs, timestamp(cs.since) < now))",
+      "type": "object",
+      "required": ["leftOperand", "operator", "rightOperand"],
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "leftOperand": { "const": "ManufacturerCredential" },
+        "operator": { "$ref": "#/$defs/ActiveOperator" },
+        "rightOperand": { "const": "active" }
+      },
+      "additionalProperties": false
+    },
+    "PermissionLogicalConstraint": {
+      "title": "Permission constraint group",
+      "description": "Exactly one of and, or or xone, recursively combining supported constraints. andSequence is intentionally excluded: EDC's checked JSON-LD-to-model transformer handles only and, or and xone.",
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "and": { "$ref": "#/$defs/PermissionConstraintList" },
+        "or": { "$ref": "#/$defs/PermissionConstraintList" },
+        "xone": { "$ref": "#/$defs/PermissionConstraintList" }
+      },
+      "oneOf": [
+        { "required": ["and"] },
+        { "required": ["or"] },
+        { "required": ["xone"] }
+      ],
+      "additionalProperties": false
+    },
+    "PermissionConstraintList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/PermissionConstraint" }
+    },
+    "CelLogicalConstraint": {
+      "title": "Credential constraint group",
+      "type": "object",
+      "properties": {
+        "@id": { "$ref": "#/$defs/Identifier" },
+        "@type": { "const": "Constraint" },
+        "and": { "$ref": "#/$defs/CelConstraintList" },
+        "or": { "$ref": "#/$defs/CelConstraintList" },
+        "xone": { "$ref": "#/$defs/CelConstraintList" }
+      },
+      "oneOf": [
+        { "required": ["and"] },
+        { "required": ["or"] },
+        { "required": ["xone"] }
+      ],
+      "additionalProperties": false
+    },
+    "CelConstraintList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/CelConstraint" }
+    }
+  }
+}
