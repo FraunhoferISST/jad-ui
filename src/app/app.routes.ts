@@ -51,6 +51,14 @@ export const routes: Routes = [
           import('@eclipse-edc/dashboard-core/policies').then(m => m.PolicyViewComponent),
       },
       {
+        path: 'policy-builder',
+        title: 'Policy Builder',
+        loadComponent: () =>
+          import('../participant-view/policy-builder/policy-builder.component').then(
+            m => m.PolicyBuilderComponent,
+          ),
+      },
+      {
         path: 'contract-definitions',
         loadComponent: () =>
           import('@eclipse-edc/dashboard-core/contract-definitions').then(

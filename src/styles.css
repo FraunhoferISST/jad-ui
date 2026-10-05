@@ -16,3 +16,11 @@
     coffee,
     emerald --default;
 }
+
+/* Only the bounded policy workspace opts out of the library shell's content
+   overflow. Other routed views retain their existing page-level scrolling. */
+#router-content:has(> app-policy-builder) {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}

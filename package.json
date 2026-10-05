@@ -33,6 +33,8 @@
     "@angular/router": "^21.2.17",
     "@eclipse-edc/dashboard-core": "^0.7.0",
     "@think-it-labs/edc-connector-client": "./think-it-labs-edc-connector-client-0.10.0.tgz",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "angular-oauth2-oidc": "^21.0.3",
     "jsonld": "^9.0.0",
     "material-symbols": "^0.44.0",

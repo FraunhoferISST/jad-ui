@@ -1,0 +1,151 @@
+@if (block(); as block) {
+  <fieldset
+    class="fieldset min-w-0 space-y-3"
+    [class.border-l-2]="nested()"
+    [class.border-base-content/10]="nested()"
+    [class.pl-4]="nested()"
+  >
+    <div class="flex items-start justify-between gap-3">
+      <p class="whitespace-pre-line text-sm leading-relaxed opacity-80" data-full-description>
+        {{ block.description }}
+      </p>
+      @if (nested()) {
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm shrink-0"
+          [disabled]="disabled()"
+          (click)="remove.emit()"
+          [attr.aria-label]="'Remove ' + block.title"
+        >
+          Remove
+        </button>
+      }
+    </div>
+    @if (block.kind === 'atomic') {
+      <label class="fieldset">
+        <span class="label">Left operand</span>
+        <code class="rounded-box bg-base-200 p-3">{{ block.operand }}</code>
+      </label>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="fieldset">
+          <span class="label">Operator</span>
+          <select
+            class="select w-full"
+            [formField]="fields.operator"
+            (change)="changeOperator($event)"
+          >
+            @for (operator of block.operators; track operator) {
+              <option [value]="operator">{{ operator }}</option>
+            }
+          </select>
+        </label>
+        @if (choices().length > 1) {
+          <label class="fieldset">
+            <span class="label">Value format</span>
+            <select
+              class="select w-full"
+              [formField]="fields.valueChoice"
+              (change)="changeValueChoice($event)"
+            >
+              @for (option of choices(); track option.id) {
+                <option [value]="option.id">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+      @if (choice(); as value) {
+        <label class="fieldset">
+          <span class="label">Right operand · {{ value.label }}</span>
+          @if (value.type === 'array') {
+            <textarea
+              class="textarea w-full"
+              rows="3"
+              [formField]="fields.value"
+              [placeholder]="value.placeholder || 'One value per line'"
+            ></textarea>
+          } @else if (value.choices.length) {
+            <select class="select w-full" [formField]="fields.value">
+              @for (option of value.choices; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          } @else if (value.type === 'boolean') {
+            <select class="select w-full" [formField]="fields.value">
+              <option value="">Choose a value</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          } @else {
+            <input
+              class="input w-full"
+              type="text"
+              [formField]="fields.value"
+              [placeholder]="value.placeholder"
+            />
+          }
+          @if (value.schema.description) {
+            <span class="whitespace-pre-line text-xs opacity-70">{{
+              value.schema.description
+            }}</span>
+          }
+          @if (value.schema.pattern) {
+            <code class="break-all text-xs opacity-70">{{ value.schema.pattern }}</code>
+          }
+        </label>
+      }
+    } @else {
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs opacity-70">
+          {{ block.operand }} group · minimum {{ block.minItems }} child constraint(s)
+        </p>
+        <div class="dropdown dropdown-end">
+          <button
+            type="button"
+            tabindex="0"
+            class="btn btn-soft btn-primary"
+            title="Add child constraint"
+            [disabled]="disabled()"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">add</span>
+            Add Constraint
+          </button>
+          <ul
+            tabindex="0"
+            class="dropdown-content menu mt-2 max-h-[50vh] w-72 max-w-[80vw] flex-nowrap overflow-y-auto rounded-2xl bg-base-300 p-2 shadow-2xl"
+            aria-label="Available child constraints"
+          >
+            @for (childBlock of definition().blocks; track childBlock.id) {
+              <li>
+                <button
+                  #childConstraintOption
+                  type="button"
+                  class="truncate"
+                  [disabled]="disabled()"
+                  (click)="addChild(childBlock.id); childConstraintOption.blur()"
+                >
+                  {{ childBlock.title }}
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+      <div class="space-y-3">
+        @for (child of draft().children; track child.id) {
+          <app-constraint-editor
+            [schema]="schema()"
+            [definition]="definition()"
+            [draft]="child"
+            [nested]="true"
+            [disabled]="disabled()"
+            (draftChange)="updateChild(child.id, $event)"
+            (remove)="removeChild(child.id)"
+          />
+        } @empty {
+          <p class="text-sm opacity-70">Add constraints to this group.</p>
+        }
+      </div>
+    }
+  </fieldset>
+}

@@ -1,0 +1,191 @@
+<div class="flex h-full min-w-0 flex-col p-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <label class="input min-w-0 flex-1">
+      <span class="label">Name</span>
+      <input
+        type="text"
+        [formField]="fields.name"
+        placeholder="Rule label"
+        aria-label="Rule name (editor only)"
+      />
+    </label>
+    @if (definition().actions.length > 1) {
+      <label class="select">
+        <span class="label">Action</span>
+        <select [formField]="fields.action">
+          @for (action of definition().actions; track action) {
+            <option [value]="action">{{ action }}</option>
+          }
+        </select>
+      </label>
+    }
+    <div class="dropdown dropdown-end">
+      <button
+        type="button"
+        tabindex="0"
+        class="btn btn-soft btn-primary"
+        title="Add constraint"
+        [disabled]="disabled()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">add</span>
+        Add Constraint
+      </button>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu mt-2 max-h-[50vh] w-72 max-w-[80vw] flex-nowrap overflow-y-auto rounded-2xl bg-base-300 p-2 shadow-2xl"
+        aria-label="Available constraints"
+      >
+        @for (block of definition().blocks; track block.id) {
+          <li>
+            <button
+              #constraintOption
+              type="button"
+              class="truncate"
+              [disabled]="disabled()"
+              (click)="addConstraint(block.id); constraintOption.blur()"
+            >
+              {{ block.title }}
+            </button>
+          </li>
+        }
+      </ul>
+    </div>
+  </div>
+
+  <div class="divider my-4 text-sm opacity-80">Constraints</div>
+  <ul class="min-w-0 px-2" aria-label="Rule constraints">
+    @for (constraint of rule().constraints; track constraint.id) {
+      <li
+        class="flex min-w-0 items-center gap-3 border-b border-base-content/10 py-3 last:border-b-0"
+      >
+        <button
+          type="button"
+          class="min-w-0 flex-1 text-left"
+          [disabled]="disabled()"
+          (click)="editConstraint(constraint)"
+          [attr.aria-label]="'Edit ' + block(constraint)?.title"
+        >
+          <span class="block text-xs opacity-60">{{
+            block(constraint)?.kind === 'logical' ? 'Logical Constraint' : 'Atomic Constraint'
+          }}</span>
+          <span class="block truncate">{{
+            schema().constraintSummary(constraint, definition())
+          }}</span>
+          <span class="block truncate text-xs opacity-60" data-description>{{
+            block(constraint)?.description
+          }}</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-soft btn-sm btn-square"
+          [disabled]="disabled()"
+          (click)="editConstraint(constraint)"
+          [attr.aria-label]="'Edit ' + block(constraint)?.title"
+        >
+          <span class="material-symbols-rounded text-lg!" aria-hidden="true">edit</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-soft btn-error btn-sm btn-square"
+          [disabled]="disabled()"
+          (click)="removeConstraint(constraint.id)"
+          [attr.aria-label]="'Remove ' + block(constraint)?.title"
+        >
+          <span class="material-symbols-rounded text-lg!" aria-hidden="true">delete</span>
+        </button>
+      </li>
+    } @empty {
+      <li class="py-3 text-sm opacity-60">
+        No constraints. Add a constraint to restrict this rule.
+      </li>
+    }
+  </ul>
+
+  @if (definition().duty; as dutyDefinition) {
+    <section class="mt-6 space-y-3" aria-label="Permission duties">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm opacity-70">Attached duties</h3>
+        <button
+          type="button"
+          class="btn btn-soft btn-sm"
+          [disabled]="disabled()"
+          (click)="addDuty()"
+        >
+          Add duty
+        </button>
+      </div>
+      @for (duty of rule().duties; track duty.id) {
+        <div class="rounded-2xl bg-base-200 p-2">
+          <div class="flex justify-end">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              [disabled]="disabled()"
+              (click)="removeDuty(duty.id)"
+              aria-label="Remove duty"
+            >
+              Remove duty
+            </button>
+          </div>
+          <app-rule-editor
+            [schema]="schema()"
+            [definition]="dutyDefinition"
+            [rule]="duty"
+            [disabled]="disabled()"
+            (ruleChange)="updateDuty(duty.id, $event)"
+          />
+        </div>
+      }
+    </section>
+  }
+</div>
+
+<dialog
+  #constraintDialog
+  class="modal"
+  [attr.aria-labelledby]="dialogTitleId"
+  (cancel)="$event.preventDefault(); cancelEdit()"
+>
+  <form
+    class="modal-box max-h-[85dvh] w-11/12 max-w-3xl bg-base-100"
+    (submit)="$event.preventDefault(); saveEdit()"
+  >
+    @if (editingDraft(); as draft) {
+      <header class="mb-4 flex items-center justify-between gap-3">
+        <h2 [id]="dialogTitleId" class="text-lg font-semibold">
+          {{ adding() ? 'Add' : 'Edit' }} {{ block(draft)?.title }}
+        </h2>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square"
+          aria-label="Close constraint editor"
+          (click)="cancelEdit()"
+        >
+          ×
+        </button>
+      </header>
+      <app-constraint-editor
+        [schema]="schema()"
+        [definition]="definition()"
+        [draft]="draft"
+        (draftChange)="editingDraft.set($event)"
+      />
+      @if (editingErrors().length) {
+        <ul class="mt-4 space-y-1 text-sm text-error" role="status">
+          @for (message of editingErrors().slice(0, 8); track $index) {
+            <li class="break-all">{{ message }}</li>
+          }
+        </ul>
+      }
+    }
+    <div class="modal-action">
+      <button type="button" class="btn" (click)="cancelEdit()">Cancel</button>
+      <button type="submit" class="btn btn-primary" [disabled]="!canSave()">Save constraint</button>
+    </div>
+  </form>
+  <div class="modal-backdrop">
+    <button type="button" (click)="cancelEdit()" aria-label="Cancel constraint editing">
+      Close
+    </button>
+  </div>
+</dialog>

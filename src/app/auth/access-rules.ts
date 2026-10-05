@@ -19,6 +19,7 @@ export const ACCESS_RULES: Record<string, Role[]> = {
   explore: ['tenant-user'],
   partners: ['tenant-admin'],
   policies: ['tenant-admin'],
+  'policy-builder': ['tenant-admin'],
   'contract-definitions': ['tenant-admin'],
   contracts: ['tenant-admin'],
   'transfer-history': ['tenant-admin'],

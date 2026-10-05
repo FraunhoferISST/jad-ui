@@ -5,10 +5,7 @@
   "description": "Self-contained authoring schema for compact JSON-LD ODRL policies and EDC PolicyDefinition requests. Allows EDC's built-in inForceDate permission constraint, the MembershipCredential and ManufacturerCredential evaluators registered by JAD's Bruno collection, and the CounterPartyId evaluator registered by the historical JAD UI upload service. This schema does not install evaluators, issue credentials, or enforce runtime evaluation scopes.",
   "$comment": "Based on the checked JAD 1.0.0-SNAPSHOT configuration and Eclipse EDC Connector sources. Only inForceDate was found as a built-in Java atomic constraint evaluator; CEL helper functions are not automatically policy left operands. Credential constraints deliberately use the eq/active authoring convention: the Bruno expressions ignore this.operator and this.rightOperand, so other comparisons would misleadingly imply different semantics. Use this schema with EDC's base API validation and policy validation/evaluation-plan APIs. It validates compact property names, not arbitrary expanded JSON-LD or context remappings. The URN is a local profile identifier, not an officially registered dataspace profile. Sources: ../jad/requests/EDC-V Onboarding/EDC-V Management/Prepare Consumer Participant/; src/participant-view/utils/policy.utils.ts and src/participant-view/services/upload.service.ts at commit 82b5479, immediately before tenant-admin was introduced in 384a5bc; https://github.com/eclipse-edc/Connector/blob/main/core/control-plane/lib/control-plane-lib/src/main/java/org/eclipse/edc/connector/controlplane/policy/contract/ContractExpiryCheckFunction.java; https://github.com/eclipse-edc/Connector/blob/main/core/common/cel-core/src/main/java/org/eclipse/edc/policy/cel/CelPolicyCoreExtension.java.",
   "type": "object",
-  "oneOf": [
-    { "$ref": "#/$defs/PolicyDefinition" },
-    { "$ref": "#/$defs/Policy" }
-  ],
+  "oneOf": [{ "$ref": "#/$defs/PolicyDefinition" }, { "$ref": "#/$defs/Policy" }],
   "examples": [
     {
       "@context": ["https://w3id.org/edc/connector/management/v2"],
@@ -112,10 +109,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "oneOf": [
-              { "type": "string", "minLength": 1 },
-              { "type": "object" }
-            ]
+            "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "object" }]
           }
         }
       ]
@@ -255,6 +249,7 @@
     },
     "InForceDateConstraint": {
       "title": "Contract validity date",
+      "x-jad-evaluation-scopes": ["transfer.process", "policy.monitor"],
       "description": "EDC built-in permission constraint: compares the current time against a fixed instant or the agreement signing time plus an offset. Evaluated in transfer.process and, if installed, policy.monitor; it is not a catalog or negotiation eligibility check.",
       "type": "object",
       "required": ["leftOperand", "operator", "rightOperand"],
@@ -298,6 +293,7 @@
     },
     "MembershipCredentialConstraint": {
       "title": "Active membership credential",
+      "x-jad-evaluation-scopes": ["catalog", "contract.negotiation", "transfer.process"],
       "description": "Requires a presented MembershipCredential with a subject whose membershipStartDate is before now. Bruno registers this evaluator for catalog, contract.negotiation and transfer.process, not policy.monitor. The active value is an authoring convention, not a credential status claim comparison. Credential trust, expiration and revocation checks are performed separately by DCP.",
       "$comment": "Bruno CEL: ctx.agent.claims.vc.filter(c, c.type.exists(t, t == 'MembershipCredential')).exists(c, c.credentialSubject.exists(cs, timestamp(cs.membershipStartDate) < now))",
       "type": "object",
@@ -313,6 +309,7 @@
     },
     "ManufacturerCredentialConstraint": {
       "title": "Active manufacturer credential",
+      "x-jad-evaluation-scopes": ["catalog", "contract.negotiation", "transfer.process"],
       "description": "Requires a presented ManufacturerCredential with a subject whose since date is before now. Bruno registers this evaluator for catalog, contract.negotiation and transfer.process, not policy.monitor. It does not check contractVersion or part_types. The active value is an authoring convention, not a credential status claim comparison.",
       "$comment": "Bruno CEL: ctx.agent.claims.vc.filter(c, c.type.exists(t, t == 'ManufacturerCredential')).exists(c, c.credentialSubject.exists(cs, timestamp(cs.since) < now))",
       "type": "object",
@@ -328,6 +325,7 @@
     },
     "CounterPartyIdConstraint": {
       "title": "Allowed counterparty",
+      "x-jad-evaluation-scopes": ["catalog", "contract.negotiation", "transfer.process"],
       "description": "Matches the authenticated counterparty's ctx.agent.id against one participant identifier (eq) or a nonempty list of participant identifiers (isAnyOf). Use the authenticated agent identifier, typically its DID, not a display name or an unrelated database ID. The historical upload service registered cert-partner-access-policy-expression for catalog, contract.negotiation and transfer.process, not policy.monitor. The expression branches on rightOperand's type and ignores this.operator; this schema deliberately permits only the scalar eq and list isAnyOf conventions used by that service.",
       "$comment": "CEL expression cert-partner-access-policy-expression, from src/participant-view/utils/policy.utils.ts at commit 82b5479: type(this.rightOperand) == list ? ctx.agent.id in this.rightOperand : ctx.agent.id == this.rightOperand. The pre-tenant-admin upload service ensured this expression existed, then created a PolicyDefinition, an Asset, and a ContractDefinition using the same policy ID for accessPolicyId and contractPolicyId. Schema registration does not register this CEL expression.",
       "type": "object",
@@ -379,11 +377,7 @@
         "or": { "$ref": "#/$defs/PermissionConstraintList" },
         "xone": { "$ref": "#/$defs/PermissionConstraintList" }
       },
-      "oneOf": [
-        { "required": ["and"] },
-        { "required": ["or"] },
-        { "required": ["xone"] }
-      ],
+      "oneOf": [{ "required": ["and"] }, { "required": ["or"] }, { "required": ["xone"] }],
       "additionalProperties": false
     },
     "PermissionConstraintList": {
@@ -401,11 +395,7 @@
         "or": { "$ref": "#/$defs/CelConstraintList" },
         "xone": { "$ref": "#/$defs/CelConstraintList" }
       },
-      "oneOf": [
-        { "required": ["and"] },
-        { "required": ["or"] },
-        { "required": ["xone"] }
-      ],
+      "oneOf": [{ "required": ["and"] }, { "required": ["or"] }, { "required": ["xone"] }],
       "additionalProperties": false
     },
     "CelConstraintList": {

@@ -12,7 +12,13 @@
       "text": "Partners",
       "materialSymbol": "groups",
       "routerPath": "partners",
-      "viewDescription": "The partners view lets participants manage partner references for their dataspace, add new partners from registered participants, and inspect the currently configured partner list.",
+      "viewDescription": "The partners view lets participants manage partner references for their dataspace, add new partners from registered participants, and inspect the currently configured partner list."
+    },
+    {
+      "text": "Policy Builder",
+      "materialSymbol": "construction",
+      "routerPath": "policy-builder",
+      "viewDescription": "Build policy definitions from the JAD policy schema using dynamic constraint building blocks, preview and validate the request, and create a named policy in the selected participant connector.",
       "divider": true
     },
     {

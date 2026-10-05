@@ -1,0 +1,232 @@
+<div class="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
+  @if (error()) {
+    <div class="alert alert-error max-h-24 shrink-0 overflow-auto" role="alert">
+      <span class="break-all">{{ error() }}</span>
+    </div>
+  }
+  @if (createdName()) {
+    <div class="alert alert-success max-h-24 shrink-0 overflow-auto" role="status">
+      Policy “{{ createdName() }}” was created successfully.
+    </div>
+  }
+  @if (loading()) {
+    <p role="status" class="flex items-center gap-2">
+      <span class="loading loading-spinner" aria-hidden="true"></span>Loading policy schema…
+    </p>
+  } @else if (schema(); as schema) {
+    <form
+      (submit)="$event.preventDefault(); createPolicy()"
+      class="flex shrink-0 flex-wrap items-center gap-3 rounded-2xl bg-base-300 p-3"
+    >
+      <label class="input min-w-0 flex-1">
+        <span class="label">Policy name / ID</span>
+        <input
+          type="text"
+          [formField]="fields.name"
+          placeholder="e.g. Partner policy"
+          aria-label="Policy name / ID"
+        />
+      </label>
+      <button type="submit" class="btn btn-primary" [disabled]="!canCreate()">
+        @if (saving()) {
+          <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+        }
+        {{ saving() ? 'Creating…' : 'Create Policy' }}
+      </button>
+      @if (fields.name().touched() && fields.name().invalid()) {
+        <span class="w-full text-sm text-error">Enter a policy name.</span>
+      }
+    </form>
+
+    <div
+      class="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]"
+      aria-label="Policy editor workspace"
+    >
+      <div
+        class="grid min-h-0 min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,2fr)] overflow-hidden rounded-2xl bg-base-300 md:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.2fr)] md:grid-rows-[minmax(0,1fr)]"
+      >
+        <fieldset
+          [disabled]="saving()"
+          class="min-h-0 min-w-0 overflow-auto overscroll-contain border-b border-base-content/10 p-3 md:border-b-0 md:border-r"
+          aria-label="Policy constraints"
+        >
+          @for (definition of definitions(); track definition.kind) {
+            <section class="mb-4 last:mb-0" [attr.aria-label]="definition.title + ' constraints'">
+              <div class="dropdown block">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <h2 class="text-sm font-semibold">{{ definition.title }}</h2>
+                  <button
+                    type="button"
+                    tabindex="0"
+                    class="btn btn-soft btn-xs btn-square"
+                    [disabled]="saving()"
+                    [attr.aria-label]="'Add ' + definition.title + ' constraint'"
+                    title="Add constraint"
+                  >
+                    <span class="material-symbols-rounded text-lg!" aria-hidden="true">add</span>
+                  </button>
+                </div>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content menu left-0 max-h-[35dvh] w-full flex-nowrap overflow-y-auto rounded-2xl bg-base-100 p-2 shadow-2xl"
+                  [attr.aria-label]="'Available ' + definition.title + ' constraints'"
+                >
+                  @for (block of definition.blocks; track block.id) {
+                    <li>
+                      <button
+                        #constraintOption
+                        type="button"
+                        class="truncate"
+                        [disabled]="saving()"
+                        (click)="addConstraint(definition, block.id); constraintOption.blur()"
+                        [title]="block.title"
+                      >
+                        {{ block.title }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+              </div>
+              <ul class="menu w-full min-w-0 p-0">
+                <li>
+                  <ul class="m-0 mr-0">
+                    @for (constraint of constraintsFor(definition); track constraint.id) {
+                      <li>
+                        <div class="group flex min-w-0 items-center gap-1 p-0">
+                          <button
+                            type="button"
+                            class="min-w-0 flex-1 rounded-box p-2 text-left"
+                            [class.menu-active]="selectedId() === constraint.id"
+                            [attr.aria-pressed]="selectedId() === constraint.id"
+                            [disabled]="saving()"
+                            (click)="selectConstraint(constraint.id)"
+                          >
+                            <span class="block truncate text-sm">{{
+                              blockFor(definition, constraint)?.title
+                            }}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs btn-square shrink-0"
+                            [disabled]="saving()"
+                            (click)="removeConstraint(constraint.id)"
+                            [attr.aria-label]="'Remove ' + blockFor(definition, constraint)?.title"
+                          >
+                            <span class="material-symbols-rounded text-base!" aria-hidden="true"
+                              >delete</span
+                            >
+                          </button>
+                        </div>
+                      </li>
+                    } @empty {
+                      <li class="p-2 text-xs opacity-60">No constraints.</li>
+                    }
+                  </ul>
+                </li>
+              </ul>
+            </section>
+          }
+        </fieldset>
+
+        <section
+          class="flex min-h-0 min-w-0 flex-col overflow-hidden"
+          aria-label="Constraint editor"
+        >
+          @if (selectedConstraint(); as constraint) {
+            @if (selectedDefinition(); as definition) {
+              <header
+                class="flex shrink-0 items-center justify-between gap-3 border-b border-base-content/10 p-4"
+              >
+                <div class="min-w-0">
+                  <p class="text-xs opacity-60">{{ definition.title }}</p>
+                  <h2 class="truncate font-semibold">{{ selectedBlock()?.title }}</h2>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm btn-square shrink-0"
+                  [disabled]="saving()"
+                  (click)="removeConstraint(constraint.id)"
+                  aria-label="Remove selected constraint"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">delete</span>
+                </button>
+              </header>
+              <div
+                class="min-h-0 flex-1 overflow-auto overscroll-contain p-4"
+                aria-label="Constraint editor content"
+              >
+                @for (active of [constraint]; track active.id) {
+                  <app-constraint-editor
+                    [schema]="schema"
+                    [definition]="definition"
+                    [draft]="active"
+                    [disabled]="saving()"
+                    (draftChange)="updateConstraint(active.id, $event)"
+                  />
+                }
+                @if (selectedErrors().length) {
+                  <ul class="mt-4 space-y-1 text-sm text-error" role="status">
+                    @for (message of selectedErrors().slice(0, 8); track $index) {
+                      <li class="break-all">{{ message }}</li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          } @else {
+            <p class="min-h-0 overflow-auto p-4 text-sm opacity-60">
+              Use + beside Permission, Obligation or Prohibition to add a constraint, then select it
+              to edit.
+            </p>
+          }
+        </section>
+      </div>
+
+      <section
+        class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-base-300"
+        aria-label="Policy JSON preview"
+      >
+        <header class="flex shrink-0 items-center justify-between gap-3 px-4 pt-4">
+          <h2 class="text-sm font-semibold">JSON-LD</h2>
+          <span class="text-xs opacity-60" role="status">{{
+            result().errors.length ? 'Incomplete policy' : 'Schema valid'
+          }}</span>
+        </header>
+        @if (result().errors.length) {
+          <div
+            class="m-3 max-h-24 shrink-0 overflow-auto rounded-box bg-base-100 p-3 text-xs"
+            role="status"
+          >
+            @for (message of result().errors.slice(0, 5); track $index) {
+              <p class="break-all">{{ message }}</p>
+            }
+          </div>
+        }
+        <div
+          class="mockup-code min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-base-300 text-xs shadow-none"
+          tabindex="0"
+          aria-label="Creation request JSON"
+        >
+          @for (line of previewLines(); track $index) {
+            <pre [attr.data-prefix]="$index + 1"><code>{{ line }}</code></pre>
+          }
+        </div>
+        <div class="flex shrink-0 justify-end p-3">
+          <button
+            type="button"
+            class="btn btn-soft btn-sm"
+            (click)="copyRequest()"
+            [disabled]="!result().request"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">content_copy</span>Copy
+            JSON-LD
+          </button>
+        </div>
+      </section>
+    </div>
+  } @else {
+    <button type="button" class="btn self-start" (click)="loadSchema()">
+      Retry loading schema
+    </button>
+  }
+</div>

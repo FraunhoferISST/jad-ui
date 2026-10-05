@@ -61,7 +61,7 @@ class SeedTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.token_file = Path(self.temp.name) / "token"
         self.token_file.write_text("kubernetes-subject-secret")
-        self.schema = json.loads((ROOT / "jad-profile.json").read_text())
+        self.schema = json.loads((ROOT / "public/config/jad-profile.json").read_text())
         self.expressions = json.loads((DIRECTORY / "cel-expressions.json").read_text())
         self.api = FakeApi()
         api = self.api
@@ -235,7 +235,7 @@ class SeedTests(unittest.TestCase):
         historical_source = (ROOT / "src/participant-view/utils/policy.utils.ts").read_text()
         self.assertIn(self.expressions[-1]["expression"], historical_source)
 
-    def test_deploy_script_uses_root_schema_and_recreates_only_its_job(self):
+    def test_deploy_script_uses_public_schema_and_recreates_only_its_job(self):
         directory = Path(self.temp.name)
         log = directory / "kubectl-calls.jsonl"
         kubectl = directory / "kubectl"
@@ -258,7 +258,7 @@ elif sys.argv[-1] == '-':
         self.assertEqual(calls[0], ["kustomize", str(DIRECTORY)])
         self.assertEqual(calls[1], ["-n", "edc-v", "delete", "job", "jad-profile-seed", "--ignore-not-found", "--wait=true"])
         create = next(call for call in calls if "create" in call)
-        self.assertIn(f"--from-file=jad-profile.json={ROOT / 'jad-profile.json'}", create)
+        self.assertIn(f"--from-file=jad-profile.json={ROOT / 'public/config/jad-profile.json'}", create)
 
 
 if __name__ == "__main__":

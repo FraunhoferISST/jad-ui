@@ -18,6 +18,7 @@ deployment, backed by the Redline tenant-management API.
 - [Prerequisites](#prerequisites)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
+- [Policy Builder](#policy-builder)
 - [JAD policy profile seed](#jad-policy-profile-seed)
 - [Authentication & roles](#authentication--roles)
 - [Project structure](#project-structure)
@@ -58,7 +59,8 @@ deployment, backed by the Redline tenant-management API.
                ▼                                   ▼                              ▼
     tenant-admin (EDC + Partners)       tenant-user (Files, Explore)      operator (Tenants)
     catalog / assets / policies /       ──► file sharing + EDC           ──► Redline API
-    contract-definitions / contracts    shared Home for all roles
+    policy-builder / contracts          shared Home for all roles
+    contract-definitions
     ──► EDC connectors
 ```
 
@@ -111,9 +113,69 @@ defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
 
+## Policy Builder
+
+Tenant admins have a **Policy Builder** view at `/policy-builder`, alongside the
+existing Policy Definitions view. It follows the Tractus-X dashboard's
+constraint-sidebar / constraint-editor / preview workflow, implemented with this
+application's Angular and daisyUI components rather than its hard-coded Catena-X
+building-block catalog.
+
+The builder fetches `config/jad-profile.json`, served directly from
+`public/config/jad-profile.json`. That public file is the single source used by
+both the builder and the seed helper; no additional root asset copy is needed.
+At deployment the served JSON can be replaced like other runtime configuration;
+reload the view to load changes. Keep it aligned with the control-plane schema
+cache by rerunning the profile seed when changing the schema.
+
+- There is no access/usage policy-type selector or purpose metadata. Policies use
+  the schema-supported ODRL action; their access/usage role is determined by a
+  contract definition's `accessPolicyId` / `contractPolicyId` references.
+- Each Permission, Obligation and Prohibition category has a single rule draft.
+  Its **+** button opens an inline constraint dropdown, not an add-rule menu.
+  Category submenus list constraints with compact summaries and a single
+  truncated description line. Adding a constraint selects it automatically.
+- The center pane edits the selected constraint directly, showing its full
+  schema description, operator/value controls and validation feedback. Changes
+  immediately update the JSON-LD preview; there is no modal Save/Cancel step.
+- Generated rule arrays contain at most one item per category. The base
+  permission is retained when empty; obligation and prohibition are omitted
+  until configured, avoiding an accidental unconditional prohibition.
+- The workspace fills the shell's available content height instead of growing
+  with the policy. Navigation, constraint editing and JSON-LD have independent
+  scroll areas. On narrow screens the same bounded panes stack vertically.
+- Permission, prohibition and obligation palettes are derived from reachable
+  JSON Schema definitions and local `$ref` / `allOf` / `oneOf` / `anyOf` links.
+- Operand titles, descriptions, operator choices, constants, value formats and
+  conditional scalar/list controls come from the schema. For example,
+  `CounterPartyId` switches to a one-value-per-line list for `isAnyOf`, while
+  `inForceDate` appears only on permissions, not prohibitions or obligations.
+- Nested logical groups can be edited recursively in the center pane. This
+  constraint-focused view authors the three top-level rule categories; it does
+  not currently expose separate permission-attached duty authoring.
+- The live creation-request preview is validated with draft-2019-09 JSON Schema
+  and date-time format checking. Invalid/incomplete drafts cannot be submitted.
+- **Policy name / ID** supplies the policy definition's `@id`. **Create policy**
+  sends the exact compact request to the currently selected participant's EDC
+  management endpoint, without the redundant plain `id` property. Server
+  validation and duplicate-ID errors are displayed; no credentials or CEL
+  evaluators are registered by the builder.
+
+The schema must be self-contained and expose a PolicyDefinition envelope with
+finite operand choices and scalar/list value schemas. Enumerated operators are
+used directly; pattern-only operator schemas filter the standard ODRL vocabulary.
+This is an ODRL authoring builder, not a general-purpose editor for every JSON
+Schema keyword. An unconstrained rule or policy is supported and clearly shown.
+Schema metadata cannot install new runtime evaluators: new operands still need
+matching EDC functions/CEL registrations.
+
+No new Keycloak role or mapper is required: the existing `tenant-admin` role
+controls both navigation and route access. The schema is a static authoring
+asset, so the view does not need the platform-admin-only cached-document API.
+
 ## JAD policy profile seed
 
-The root `jad-profile.json` defines the JAD policy authoring schema.
+`public/config/jad-profile.json` defines the JAD policy authoring schema.
 [`ops/jad-profile-seed/`](ops/jad-profile-seed/README.md) provides a temporary
 standalone Kubernetes Job to cache that schema, register its validator for all
 policy-definition creation requests, and register the membership, manufacturer and
@@ -140,7 +202,7 @@ Auth is abstracted behind `AuthProvider`. The shipped
 
 Three realm roles are supported:
 
-- **tenant-admin** — Partners and EDC views (catalog, assets, policies, contract definitions, contracts, transfers).
+- **tenant-admin** — Partners, Policy Builder and EDC views (catalog, assets, policies, contract definitions, contracts, transfers).
 - **tenant-user** — Files and Explore. Uploads reuse an existing contract definition and its policies; the tenant admin creates the definition.
 - **operator** — operator console (tenants, open registrations).
 
@@ -231,6 +293,10 @@ src/
 │   ├── login/               # login view
 │   ├── registration/        # public tenant-registration form
 │   └── shell/               # dashboard shell wrapper + user menu
+├── participant-view/
+│   ├── policy-builder/      # schema-driven ODRL builder and validation
+│   ├── edc-controllers/     # custom management API controllers
+│   └── files/ explore/ partners/ services/ models/ utils/
 ├── operator-view/
 │   ├── redline.config.ts    # REDLINE_CONFIG token + APP_INITIALIZER loader
 │   ├── services/            # RedlineService (tenants, dataspaces, deploy)
@@ -238,6 +304,6 @@ src/
 │   └── tenant-view/         # tenants & open-registrations UI
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config
-jad-profile.json             # JAD ODRL policy authoring schema
+public/config/jad-profile.json # JAD ODRL policy authoring schema
 ops/jad-profile-seed/         # temporary schema + CEL registration Job
 ```

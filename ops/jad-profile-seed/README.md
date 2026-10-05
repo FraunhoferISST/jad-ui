@@ -10,7 +10,7 @@ After control-plane readiness and jwtlet token exchange, it checks the required
 APIs, then creates or updates these resources in order:
 
 1. **CachedDocument** `jad-policy-profile-v1-schema`: the root
-   [`jad-profile.json`](../../jad-profile.json), cached as `JSON_SCHEMA` with URL
+   [`public/config/jad-profile.json`](../../public/config/jad-profile.json), cached as `JSON_SCHEMA` with URL
    `urn:jad:policy-profile:v1` and pull strategy `NEVER`.
 2. **CEL expressions**, from [`cel-expressions.json`](cel-expressions.json):
    - `membership_expr` → `MembershipCredential` (JAD Bruno registration).

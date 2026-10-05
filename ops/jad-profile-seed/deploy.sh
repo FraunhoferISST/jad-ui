@@ -10,14 +10,14 @@ if [[ -z "$NAMESPACE" ]]; then
 fi
 
 # Render before deleting the previous Job, so local configuration errors do not
-# disrupt it. The root schema stays the single source of truth; no copied JSON.
+# disrupt it. The public schema stays the single source of truth; no copied JSON.
 MANIFEST="$(mktemp)"
 trap 'rm -f "$MANIFEST"' EXIT
 kubectl kustomize "$SEED_DIR" > "$MANIFEST"
 
 kubectl -n "$NAMESPACE" delete job jad-profile-seed --ignore-not-found --wait=true
 kubectl -n "$NAMESPACE" create configmap jad-profile-schema \
-  --from-file="jad-profile.json=${REPO_ROOT}/jad-profile.json" \
+  --from-file="jad-profile.json=${REPO_ROOT}/public/config/jad-profile.json" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f "$MANIFEST"
 
