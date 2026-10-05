@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: edc-v
+resources:
+  - job.yaml
+configMapGenerator:
+  - name: jad-profile-seed-code
+    files:
+      - seed.py
+      - cel-expressions.json
+  - name: jad-profile-seed-settings
+    literals:
+      - EDC_BASE=http://controlplane.edc-v.svc.cluster.local:8081/api/mgmt
+      - EDC_READINESS_URL=http://controlplane.edc-v.svc.cluster.local:8080/api/check/readiness
+      - JWTLET_TOKEN_URL=http://jwtlet.edc-v.svc.cluster.local:8080/token
+      - JWTLET_TOKEN_FILE=/var/run/secrets/jwtlet/token
+      - JWTLET_RESOURCE=issuer
+      - JWTLET_SCOPE=admin
+      - JWTLET_AUDIENCE=edcv
+      - SCHEMA_FILE=/schema/jad-profile.json
+      - CEL_FILE=/seed/cel-expressions.json
+      - HTTP_TIMEOUT_SECONDS=30
+      - READINESS_TIMEOUT_SECONDS=300
+      - HTTP_ATTEMPTS=5
+      - HTTP_RETRY_DELAY_SECONDS=2
+generatorOptions:
+  disableNameSuffixHash: true

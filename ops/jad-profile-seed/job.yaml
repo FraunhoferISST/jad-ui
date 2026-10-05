@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jad-profile-seed
+  labels:
+    app: jad-profile-seed
+    platform: edcv
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: jad-profile-seed
+        platform: edcv
+    spec:
+      # Created and JWTlet-mapped by core-platform-distribution. Do not create a
+      # new SA here: the mapping for seed-jobs already grants admin on issuer.
+      serviceAccountName: seed-jobs
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: python:3.13-slim
+          command: ["python", "-B", "/seed/seed.py"]
+          envFrom:
+            - configMapRef:
+                name: jad-profile-seed-settings
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          volumeMounts:
+            - name: seed-code
+              mountPath: /seed
+              readOnly: true
+            - name: schema
+              mountPath: /schema
+              readOnly: true
+            - name: jwtlet-subject-token
+              mountPath: /var/run/secrets/jwtlet
+              readOnly: true
+      volumes:
+        - name: seed-code
+          configMap:
+            name: jad-profile-seed-code
+        - name: schema
+          configMap:
+            name: jad-profile-schema
+        - name: jwtlet-subject-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc.cluster.local
+                  expirationSeconds: 3600

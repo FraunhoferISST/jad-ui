@@ -147,7 +147,7 @@
     },
     "Policy": {
       "title": "ODRL policy",
-      "description": "Compact ODRL policy. Omitted rule collections permit an unconstrained Set. Use Agreement, not the Java model's CONTRACT name, for an ODRL agreement. Profile is optional so existing Bruno policies remain valid; when supplied, it identifies this JAD profile as a single string for EDC's profile-filtered schema validation.",
+      "description": "Compact ODRL policy. Omitted rule collections permit an unconstrained Set. Use Agreement, not the Java model's CONTRACT name, for an ODRL agreement. Profile is optional so existing Bruno policies remain valid; when supplied, it identifies this JAD profile as a single string. The JAD seed binds this schema to all PolicyDefinition creation requests, whether or not profile is present.",
       "type": "object",
       "required": ["@type"],
       "properties": {

@@ -18,6 +18,7 @@ deployment, backed by the Redline tenant-management API.
 - [Prerequisites](#prerequisites)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
+- [JAD policy profile seed](#jad-policy-profile-seed)
 - [Authentication & roles](#authentication--roles)
 - [Project structure](#project-structure)
 
@@ -109,6 +110,28 @@ defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
+
+## JAD policy profile seed
+
+The root `jad-profile.json` defines the JAD policy authoring schema.
+[`ops/jad-profile-seed/`](ops/jad-profile-seed/README.md) provides a temporary
+standalone Kubernetes Job to cache that schema, register its validator for all
+policy-definition creation requests, and register the membership, manufacturer and
+counterparty CEL expressions. It will move to the JAD dataspace-profile Helm
+chart later.
+
+After the platform's jwtlet/issuer seeds have completed:
+
+```bash
+bash ops/jad-profile-seed/deploy.sh
+kubectl -n edc-v logs -f job/jad-profile-seed
+```
+
+The Job requires the platform's existing `seed-jobs` service account and a
+control-plane image with the document-cache, CEL and schema-validation APIs.
+It uses jwtlet's `admin` scope, not a UI role. Reruns update managed registrations;
+the schema applies even when `policy.profile` is omitted.
+See the seed README for prerequisites, configuration and local tests.
 
 ## Authentication & roles
 
@@ -215,4 +238,6 @@ src/
 │   └── tenant-view/         # tenants & open-registrations UI
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config
+jad-profile.json             # JAD ODRL policy authoring schema
+ops/jad-profile-seed/         # temporary schema + CEL registration Job
 ```
