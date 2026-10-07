@@ -145,7 +145,7 @@
                 } @else {
                   @for (transaction of file.transactionHistory; track transaction.id) {
                     <tr>
-                      <td>{{ transaction.timestamp | date: DATE_FORMATS.dateWithTime }}</td>
+                      <td>{{ (transaction.timestamp | date: DATE_FORMATS.dateWithTime) ?? 'N/A' }}</td>
                       <td>{{ transaction.partnerName || transaction.partnerId || 'N/A' }}</td>
                       <td>{{ transaction.type | titlecase }}</td>
                       <td>

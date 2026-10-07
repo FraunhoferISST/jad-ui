@@ -1,6 +1,5 @@
 import { Dataset, ContractAgreement } from '@think-it-labs/edc-connector-client';
 
-
 export interface FileAsset {
   id: string;
   name: string;
@@ -31,6 +30,6 @@ export interface Transaction {
   type: 'upload' | 'download' | 'share' | 'access';
   partnerId?: string;
   partnerName?: string;
-  timestamp: string;
+  timestamp: string | null;
   status: 'success' | 'failed' | 'pending';
 }

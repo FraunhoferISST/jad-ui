@@ -92,19 +92,36 @@ export class TransferService {
       const partnerName = partnerNames.get(partnerId);
       for (const transfer of related) {
         history.push({
-          id: transfer.correlationId ?? `${agreement.id}-${transfer.createdAt ?? Date.now()}`,
+          id: transfer.id,
           partnerId,
           partnerName: partnerName ?? 'unknown',
           type: transfer.type === 'CONSUMER' ? 'access' : 'share',
           status: (transfer.state ?? '').toUpperCase() === 'STARTED' ? 'success' : 'failed',
-          timestamp: transfer.createdAt
-            ? new Date(transfer.createdAt * 1000).toISOString()
-            : new Date().toISOString(),
+          timestamp: this.transferTimestamp(transfer),
         });
       }
     }
 
-    return history.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    return history.sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''));
+  }
+
+  private transferTimestamp(transfer: TransferProcess): string | null {
+    // EDC timestamps are epoch milliseconds. JAD omits createdAt and exposes
+    // stateTimestamp (the last state change) only as an expanded JSON-LD value.
+    for (const timestamp of [
+      transfer.createdAt,
+      transfer.optionalValue<number>('edc', 'stateTimestamp'),
+    ]) {
+      if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+        continue;
+      }
+      const date = new Date(timestamp);
+      if (!Number.isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+    }
+    // Do not misrepresent the time the dialog was opened as the transfer date.
+    return null;
   }
 
   /**

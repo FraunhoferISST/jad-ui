@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
+import { ContractAgreement, TransferProcess } from '@think-it-labs/edc-connector-client';
 
 import { AuthService } from '../../app/auth/auth.service';
 import { FileAsset } from '../models/file-asset.model';
@@ -179,4 +180,124 @@ describe('TransferService download', () => {
     http.expectNone(tokenUrl);
     expect(click).not.toHaveBeenCalled();
   }));
+});
+
+describe('TransferService history', () => {
+  let service: TransferService;
+  let queryAll: jasmine.Spy;
+  let file: FileAsset;
+
+  beforeEach(() => {
+    const agreement = new ContractAgreement();
+    agreement.id = 'contract-id';
+    agreement.setValue('edc', 'providerId', 'provider');
+    agreement.setValue('edc', 'consumerId', 'consumer');
+    file = {
+      id: 'file',
+      name: 'report.txt',
+      origin: 'remote',
+      uploadedAt: 0,
+      agreements: [agreement],
+    };
+    queryAll = jasmine.createSpy('queryAll').and.resolveTo([]);
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        {
+          provide: EdcClientService,
+          useValue: {
+            getClient: async () => ({ management: { transferProcesses: { queryAll } } }),
+          },
+        },
+        {
+          provide: PartnerService,
+          useValue: {
+            getPartners: async () => [
+              { identifier: 'provider', nickname: 'Provider partner' },
+              { identifier: 'consumer', nickname: 'Consumer partner' },
+            ],
+          },
+        },
+        { provide: ParticipantConfigService, useValue: {} },
+        { provide: AuthService, useValue: {} },
+      ],
+    });
+    service = TestBed.inject(TransferService);
+  });
+
+  function transfer(id: string, values: Record<string, unknown>): TransferProcess {
+    const entity = new TransferProcess();
+    entity.id = id;
+    for (const [key, value] of Object.entries({
+      contractId: 'contract-id',
+      type: 'CONSUMER',
+      state: 'STARTED',
+      ...values,
+    })) {
+      entity.setValue('edc', key, value);
+    }
+    return entity;
+  }
+
+  it('matches agreements by @id and uses distinct millisecond state timestamps, newest first', async () => {
+    const older = 1791362190709;
+    const newer = 1791368970635;
+    queryAll.and.resolveTo([
+      transfer('older', { stateTimestamp: older }),
+      transfer('other-file', { contractId: 'unrelated', stateTimestamp: newer }),
+      transfer('newer', { stateTimestamp: newer }),
+    ]);
+    const history = await service.getFileTransferHistory(file);
+    expect(history.map((item) => item.id)).toEqual(['newer', 'older']);
+    expect(history.map((item) => item.timestamp)).toEqual([
+      new Date(newer).toISOString(),
+      new Date(older).toISOString(),
+    ]);
+    expect(history[0].type).toBe('access');
+    expect(history[0].partnerName).toBe('Provider partner');
+    expect((await service.getFileTransferHistory(file)).map((item) => item.timestamp)).toEqual(
+      history.map((item) => item.timestamp),
+    );
+  });
+
+  it('lists provider transfers as shares with the consumer partner', async () => {
+    file.origin = 'owned';
+    queryAll.and.resolveTo([
+      transfer('provider-transfer', { type: 'PROVIDER', stateTimestamp: 1791368970635 }),
+    ]);
+    const history = await service.getFileTransferHistory(file);
+    expect(history.length).toBe(1);
+    expect(history[0].type).toBe('share');
+    expect(history[0].partnerId).toBe('consumer');
+    expect(history[0].partnerName).toBe('Consumer partner');
+  });
+
+  it('prefers creation time when available, also in milliseconds', async () => {
+    const createdAt = 1791362190709;
+    queryAll.and.resolveTo([transfer('created', { createdAt, stateTimestamp: 1791368970635 })]);
+    expect((await service.getFileTransferHistory(file))[0].timestamp).toBe(
+      new Date(createdAt).toISOString(),
+    );
+  });
+
+  it('preserves epoch zero and falls back from invalid creation dates', async () => {
+    queryAll.and.resolveTo([
+      transfer('epoch', { createdAt: 0 }),
+      transfer('fallback', { createdAt: NaN, stateTimestamp: 1791368970635 }),
+    ]);
+    const history = await service.getFileTransferHistory(file);
+    expect(history[0].timestamp).toBe(new Date(1791368970635).toISOString());
+    expect(history[1].timestamp).toBe('1970-01-01T00:00:00.000Z');
+  });
+
+  it('leaves missing/invalid dates unknown, sorts them last and retains stable process ids', async () => {
+    queryAll.and.resolveTo([
+      transfer('missing', {}),
+      transfer('invalid', { createdAt: Infinity, stateTimestamp: 1e20 }),
+      transfer('dated', { stateTimestamp: 1791368970635 }),
+    ]);
+    const history = await service.getFileTransferHistory(file);
+    expect(history.map((item) => item.id)).toEqual(['dated', 'missing', 'invalid']);
+    expect(history.slice(1).map((item) => item.timestamp)).toEqual([null, null]);
+  });
 });

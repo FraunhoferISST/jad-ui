@@ -8,6 +8,6 @@
     "baseUrl": "http://file-sharing-app.localhost"
   },
   "siglet": {
-    "baseUrl": "http://edc-proxy.localhost/proxy/issuerservice"
+    "baseUrl": "http://edc-proxy.localhost/proxy/siglet"
   }
 }

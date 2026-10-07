@@ -36,8 +36,7 @@ export class ExploreDetailComponent implements OnChanges {
     if (changes['file']) {
       this.loadingAgreements = true;
       this.loadingTransferHistory = true;
-      void this.loadAgreements();
-      void this.loadTransferHistory();
+      void this.loadDetails();
     }
   }
 
@@ -81,6 +80,12 @@ export class ExploreDetailComponent implements OnChanges {
     } finally {
       this.requestingTransfer = false;
     }
+  }
+
+  private async loadDetails(): Promise<void> {
+    // History is matched by agreement id; wait for the agreement entities first.
+    await this.loadAgreements();
+    await this.loadTransferHistory();
   }
 
   private async loadAgreements(): Promise<void> {
