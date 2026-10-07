@@ -6,5 +6,8 @@
   },
   "fileSharing": {
     "baseUrl": "http://file-sharing-app.localhost"
+  },
+  "siglet": {
+    "baseUrl": "http://edc-proxy.localhost/proxy/issuerservice"
   }
 }

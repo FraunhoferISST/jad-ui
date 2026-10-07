@@ -44,6 +44,9 @@ spec:
               value: edc-v
             - name: JWTLET_EDC_PROXY_SA
               value: edc-administration-api-client
+            # Allow the proxy to retrieve participant-bound transfer tokens from Siglet.
+            - name: JWTLET_SCOPES
+              value: '["write","read","management-api:admin","siglet-token"]'
             - name: KEYCLOAK_BASE_URL
               value: http://keycloak.edc-v.svc:80
             - name: KEYCLOAK_REALM

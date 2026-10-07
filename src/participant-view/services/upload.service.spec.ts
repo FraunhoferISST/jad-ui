@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
+import { AuthService } from '../../app/auth/auth.service';
 import { FileSharingApiService } from './file-sharing-api.service';
 import { UploadService } from './upload.service';
 
@@ -47,6 +48,7 @@ describe('UploadService', () => {
     TestBed.configureTestingModule({
       providers: [
         UploadService,
+        { provide: AuthService, useValue: { user: () => ({ participantContextId: 'owner-context' }) } },
         { provide: FileSharingApiService, useValue: fileSharing },
         { provide: EdcClientService, useValue: {
           getClient: async () => ({ management: { contractDefinitions: definitions, assets } }),
@@ -60,6 +62,10 @@ describe('UploadService', () => {
     await service.uploadFile(new File(['hello'], 'report.txt'), definition.id);
 
     const assetId = assets.create.calls.mostRecent().args[0]['@id'] as string;
+    expect(assets.create.calls.mostRecent().args[0].dataplaneMetadata.properties).toEqual({
+      fileId: 'stored-file',
+      participantContextId: 'owner-context',
+    });
     expect(definitions.get).toHaveBeenCalledTimes(2);
     expect(definitions.update).toHaveBeenCalledOnceWith({
       '@type': 'ContractDefinition',
@@ -106,6 +112,16 @@ describe('UploadService', () => {
 
     expect(assets.delete).not.toHaveBeenCalled();
     expect(fileSharing.deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('does not store a file without a participant context', async () => {
+    spyOn(TestBed.inject(AuthService), 'user').and.returnValue(null);
+
+    await expectAsync(service.uploadFile(new File(['hello'], 'report.txt'), definition.id))
+      .toBeRejectedWithError('Participant context id is unavailable for the upload.');
+
+    expect(fileSharing.uploadFile).not.toHaveBeenCalled();
+    expect(assets.create).not.toHaveBeenCalled();
   });
 
   it('does not store a file if the selected definition is unavailable', async () => {

@@ -11,9 +11,14 @@ export interface ParticipantFileSharingConfig {
   baseUrl: string;
 }
 
+export interface ParticipantSigletConfig {
+  baseUrl: string;
+}
+
 interface ParticipantFeatureConfig {
   upload: ParticipantUploadConfig;
   fileSharing: ParticipantFileSharingConfig;
+  siglet: ParticipantSigletConfig;
   defaultServiceProviderId?: number;
 }
 
@@ -24,6 +29,9 @@ const DEFAULT_CONFIG: ParticipantFeatureConfig = {
   },
   fileSharing: {
     baseUrl: 'http://file-sharing-app.localhost',
+  },
+  siglet: {
+    baseUrl: 'http://edc-proxy.localhost/proxy/issuerservice',
   },
   defaultServiceProviderId: 1,
 };
@@ -49,6 +57,10 @@ export class ParticipantConfigService {
     return (await this.getConfig()).fileSharing;
   }
 
+  async getSigletConfig(): Promise<ParticipantSigletConfig> {
+    return (await this.getConfig()).siglet;
+  }
+
   async getDefaultServiceProviderId(): Promise<number | null> {
     const value = (await this.getConfig()).defaultServiceProviderId;
     return typeof value === 'number' ? value : null;
@@ -66,15 +78,23 @@ export class ParticipantConfigService {
             ? loaded.upload.maxFileSize
             : DEFAULT_CONFIG.upload.maxFileSize,
         allowedFileTypes: Array.isArray(loaded.upload?.allowedFileTypes)
-          ? loaded.upload.allowedFileTypes.filter(type => typeof type === 'string')
+          ? loaded.upload.allowedFileTypes.filter((type) => typeof type === 'string')
           : DEFAULT_CONFIG.upload.allowedFileTypes,
       };
 
       const fileSharing: ParticipantFileSharingConfig = {
         baseUrl:
-          typeof loaded.fileSharing?.baseUrl === 'string' && loaded.fileSharing.baseUrl.trim().length > 0
+          typeof loaded.fileSharing?.baseUrl === 'string' &&
+          loaded.fileSharing.baseUrl.trim().length > 0
             ? loaded.fileSharing.baseUrl
             : DEFAULT_CONFIG.fileSharing.baseUrl,
+      };
+
+      const siglet: ParticipantSigletConfig = {
+        baseUrl:
+          typeof loaded.siglet?.baseUrl === 'string' && loaded.siglet.baseUrl.trim().length > 0
+            ? loaded.siglet.baseUrl
+            : DEFAULT_CONFIG.siglet.baseUrl,
       };
 
       const defaultServiceProviderId =
@@ -82,7 +102,7 @@ export class ParticipantConfigService {
           ? loaded.defaultServiceProviderId
           : DEFAULT_CONFIG.defaultServiceProviderId;
 
-      return { upload, fileSharing, defaultServiceProviderId };
+      return { upload, fileSharing, siglet, defaultServiceProviderId };
     } catch {
       return DEFAULT_CONFIG;
     }

@@ -4,16 +4,23 @@ import { AssetInput, ContractDefinitionInput, CriterionInput } from '@think-it-l
 
 import { asString } from '../utils/cast.utils';
 import { ExtendedEdcClient } from '../models/edc.model';
+import { AuthService } from '../../app/auth/auth.service';
 import { FileSharingApiService } from './file-sharing-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class UploadService {
   private readonly fileSharing = inject(FileSharingApiService);
+  private readonly auth = inject(AuthService);
   private readonly edcClientService = inject(EdcClientService);
 
   async uploadFile(file: File, contractDefinitionId: string): Promise<void> {
     if (!contractDefinitionId) {
       throw new Error('Select a contract definition before uploading.');
+    }
+
+    const participantContextId = this.auth.user()?.participantContextId;
+    if (!participantContextId) {
+      throw new Error('Participant context id is unavailable for the upload.');
     }
 
     const client = (await this.edcClientService.getClient()) as ExtendedEdcClient;
@@ -58,7 +65,9 @@ export class UploadService {
         },
         dataplaneMetadata: {
           '@type': 'DataplaneMetadata',
-          properties: { fileId },
+          // The provider data plane (siglet) maps these into the EDR token so the
+          // consumer's download can be resolved against /api/dataplane/files.
+          properties: { fileId, participantContextId },
         },
       };
       assetCreateAttempted = true;
