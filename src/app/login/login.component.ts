@@ -23,11 +23,17 @@ export class LoginComponent implements OnInit {
 
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(false);
+  protected readonly redirecting = signal(false);
 
   ngOnInit(): void {
     this.error.set(this.auth.consumeInitializationError());
 
     if (this.auth.isAuthenticated()) {
+      // Already logged in (e.g. returning from the Keycloak callback whose
+      // redirectUri is /login). Show a transitional state while the async
+      // navigateByUrl() lazy-loads the shell/home — without this the login
+      // form flashes for ~1s after a successful login.
+      this.redirecting.set(true);
       void this.redirect();
     }
   }
@@ -49,7 +55,10 @@ export class LoginComponent implements OnInit {
   }
 
   private async redirect(): Promise<void> {
-    const returnUrl = this.auth.consumePostLoginRedirectUrl() ?? this.route.snapshot.queryParamMap.get('returnUrl') ?? '/home';
+    const returnUrl =
+      this.auth.consumePostLoginRedirectUrl() ??
+      this.route.snapshot.queryParamMap.get('returnUrl') ??
+      '/home';
     await this.router.navigateByUrl(returnUrl);
   }
 }

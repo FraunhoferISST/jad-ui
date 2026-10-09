@@ -10,9 +10,9 @@ import { AuthService } from '../auth/auth.service';
  * `navbarEndComponents` input via `ngComponentOutlet`. This component is that
  * injected slot: it shows the signed-in user and offers a logout action.
  *
- * Logout is performed by navigating to the side-effect-only `/logout` route
- * (handled by `logoutGuard`), which clears the session and redirects to
- * `/login`.
+ * Logout is performed by navigating to the `/logout` route, which clears the
+ * session and shows a full-screen sign-out loader while the IdP's full-page
+ * logout navigation completes.
  */
 @Component({
   selector: 'app-user-menu',

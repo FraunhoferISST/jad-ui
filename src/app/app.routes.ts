@@ -1,12 +1,11 @@
 import { Routes } from '@angular/router';
 import { authGuard, authChildGuard } from './auth/guards/auth.guard';
 import { roleGuard } from './auth/guards/role.guard';
-import { logoutGuard } from './auth/guards/logout.guard';
 
 export const routes: Routes = [
   {
     path: 'login',
-    loadComponent: () => import('./login/login.component').then(m => m.LoginComponent),
+    loadComponent: () => import('./login/login.component').then((m) => m.LoginComponent),
   },
   {
     // Public, unauthenticated tenant-registration request form. Rendered
@@ -14,20 +13,20 @@ export const routes: Routes = [
     // up for operators under the "Open Registrations" view.
     path: 'register',
     loadComponent: () =>
-      import('./registration/registration.component').then(m => m.RegistrationComponent),
+      import('./registration/registration.component').then((m) => m.RegistrationComponent),
   },
   {
-    // Side-effect-only route: clears the session and redirects to /login.
+    // Full-screen sign-out view: clears the session, shows a sign-out loader
+    // and lets the IdP's full-page logout navigation complete.
     path: 'logout',
-    canActivate: [logoutGuard],
-    children: [],
+    loadComponent: () => import('./logout/logout.component').then((m) => m.LogoutComponent),
   },
   {
     // Authenticated shell layout. Children render inside the dashboard shell's
     // router-outlet. `authGuard` enforces authentication, `roleGuard` enforces
     // per-view role access (driven by ACCESS_RULES).
     path: '',
-    loadComponent: () => import('./shell/shell.component').then(m => m.ShellComponent),
+    loadComponent: () => import('./shell/shell.component').then((m) => m.ShellComponent),
     canActivate: [authGuard],
     canActivateChild: [authChildGuard, roleGuard],
     children: [
@@ -38,73 +37,72 @@ export const routes: Routes = [
       },
       {
         path: 'home',
-        loadComponent: () => import('@eclipse-edc/dashboard-core/home').then(m => m.HomeViewComponent),
+        loadComponent: () =>
+          import('@eclipse-edc/dashboard-core/home').then((m) => m.HomeViewComponent),
       },
       {
         path: 'assets',
         loadComponent: () =>
-          import('@eclipse-edc/dashboard-core/assets').then(m => m.AssetViewComponent),
+          import('@eclipse-edc/dashboard-core/assets').then((m) => m.AssetViewComponent),
       },
       {
         path: 'policies',
         loadComponent: () =>
-          import('@eclipse-edc/dashboard-core/policies').then(m => m.PolicyViewComponent),
+          import('@eclipse-edc/dashboard-core/policies').then((m) => m.PolicyViewComponent),
       },
       {
         path: 'policy-builder',
         title: 'Policy Builder',
         loadComponent: () =>
           import('../participant-view/policy-builder/policy-builder.component').then(
-            m => m.PolicyBuilderComponent,
+            (m) => m.PolicyBuilderComponent,
           ),
       },
       {
         path: 'contract-definitions',
         loadComponent: () =>
           import('@eclipse-edc/dashboard-core/contract-definitions').then(
-            m => m.ContractDefinitionsViewComponent,
+            (m) => m.ContractDefinitionsViewComponent,
           ),
       },
       {
         path: 'contracts',
         loadComponent: () =>
-          import('@eclipse-edc/dashboard-core/transfer').then(m => m.ContractViewComponent),
+          import('@eclipse-edc/dashboard-core/transfer').then((m) => m.ContractViewComponent),
       },
       {
         path: 'catalog',
         loadComponent: () =>
-          import('@eclipse-edc/dashboard-core/catalog').then(m => m.CatalogViewComponent),
+          import('@eclipse-edc/dashboard-core/catalog').then((m) => m.CatalogViewComponent),
       },
       {
         path: 'files',
         loadChildren: () =>
-          import('../participant-view/files/files.routes').then(m => m.FILES_ROUTES),
+          import('../participant-view/files/files.routes').then((m) => m.FILES_ROUTES),
       },
       {
         path: 'explore',
         loadChildren: () =>
-          import('../participant-view/explore/explore.routes').then(
-            m => m.EXPLORE_ROUTES,
-          ),
+          import('../participant-view/explore/explore.routes').then((m) => m.EXPLORE_ROUTES),
       },
       {
         path: 'partners',
         loadChildren: () =>
-          import('../participant-view/partners/partners.routes').then(
-            m => m.PARTNERS_ROUTES,
-          ),
+          import('../participant-view/partners/partners.routes').then((m) => m.PARTNERS_ROUTES),
       },
       {
         path: 'transfer-history',
         loadComponent: () =>
-          import('@eclipse-edc/dashboard-core/transfer').then(m => m.TransferHistoryViewComponent),
+          import('@eclipse-edc/dashboard-core/transfer').then(
+            (m) => m.TransferHistoryViewComponent,
+          ),
       },
       {
         path: 'open-registrations',
         data: { mode: 'open' },
         loadComponent: () =>
           import('../operator-view/tenant-view/tenant-view.component').then(
-            m => m.TenantViewComponent,
+            (m) => m.TenantViewComponent,
           ),
       },
       {
@@ -112,7 +110,7 @@ export const routes: Routes = [
         data: { mode: 'deployed' },
         loadComponent: () =>
           import('../operator-view/tenant-view/tenant-view.component').then(
-            m => m.TenantViewComponent,
+            (m) => m.TenantViewComponent,
           ),
       },
     ],
