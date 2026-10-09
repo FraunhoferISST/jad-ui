@@ -11,7 +11,7 @@
           <span class="material-symbols-rounded">check_circle</span>
           <span>
             Registration for <span class="font-semibold">{{ name }}</span> submitted. The service provider
-            will review your applciation.
+            will review your application.
           </span>
         </div>
         <a routerLink="/login" class="btn btn-primary btn-block mt-4">
@@ -36,25 +36,6 @@
               <legend class="fieldset-legend text-sm">
                 Tenant Data
               </legend>
-
-              <legend class="fieldset-label">Service Provider</legend>
-              <label class="select w-full" [ngClass]="form.get('serviceProviderId')?.invalid ? 'select-error' : ''">
-                <span class="label">Provider</span>
-                <select class="w-full" formControlName="serviceProviderId">
-                  <option [ngValue]="null" disabled>Select a service provider ...</option>
-                  @for (provider of serviceProviders(); track provider.id) {
-                    <option [ngValue]="provider.id">{{ provider.name }} (#{{ provider.id }})</option>
-                  }
-                </select>
-                @if (serviceProviders().length === 0) {
-                  <span class="text-xs text-warning">
-                    No service providers available yet. Please try again later.
-                  </span>
-                }
-              </label>
-              @if (form.get('serviceProviderId')?.invalid) {
-                <p class="fieldset-label text-error">Required</p>
-              }
 
               <legend class="fieldset-label">Tenant Name</legend>
               <label class="input input-bordered w-full">

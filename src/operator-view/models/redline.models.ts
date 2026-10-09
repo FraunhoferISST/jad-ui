@@ -29,17 +29,6 @@ export interface HealthResponse {
   [key: string]: string | undefined;
 }
 
-/** Request body to create a new service provider. */
-export interface ServiceProvider {
-  name: string;
-}
-
-/** A registered service provider. */
-export interface ServiceProviderResponse {
-  id: number;
-  name: string;
-}
-
 /** Request body to create a new dataspace. */
 export interface DataspaceRequest {
   name: string;

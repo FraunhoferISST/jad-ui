@@ -3,5 +3,14 @@ kind: Kustomization
 namespace: edc-v
 resources:
   - secret-keycloak-admin.yaml
-  - configmap-agent.yaml
   - deployment.yaml
+configMapGenerator:
+  - name: keycloakagent-config
+    files:
+      - agent.py
+      - requirements.txt
+    options:
+      labels:
+        app: keycloakagent
+generatorOptions:
+  disableNameSuffixHash: true

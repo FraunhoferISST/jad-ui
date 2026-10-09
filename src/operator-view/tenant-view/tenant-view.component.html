@@ -1,14 +1,4 @@
 <div class="flex-row flex-nowrap flex mb-4">
-  <select
-    class="select select-lg rounded-2xl shadow-xl !text-sm mr-4"
-    [ngModel]="selectedProviderId()"
-    (ngModelChange)="onProviderChange($event)">
-    <option [ngValue]="null" disabled>Service provider ...</option>
-    @for (provider of serviceProviders(); track provider.id) {
-      <option [ngValue]="provider.id">{{ provider.name }} (#{{ provider.id }})</option>
-    }
-  </select>
-
   <lib-filter-input
     placeholder="Filter for tenant ID, name or participant ..."
     [focusShortcut]="['Alt', 'j']"
@@ -18,18 +8,11 @@
   @if (mode() === 'open') {
     <button
       class="mr-4 btn btn-lg btn-primary rounded-2xl btn-soft shadow-xl !text-sm border-none"
-      [disabled]="selectedProviderId() === null"
       (click)="openRegisterTenant()">
       <span class="material-symbols-rounded">person_add</span>
       Register tenant
     </button>
   }
-  <button
-    class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
-    (click)="openCreateProvider()">
-    <span class="material-symbols-rounded">domain_add</span>
-    Provider
-  </button>
   <button
     class="mr-4 btn btn-lg btn-soft rounded-2xl shadow-xl !text-sm border-none"
     (click)="openCreateDataspace()">
@@ -63,13 +46,6 @@
     <div class="skeleton flex justify-center items-center h-72 shadow-xl rounded-2xl">
       @if (!fetched()) {
         <span class="loading loading-bars loading-lg opacity-75 text-primary"></span>
-      } @else if (selectedProviderId() === null) {
-        <div class="tooltip tooltip-open tooltip-primary" data-tip="Select or create a service provider first ...">
-          <button class="btn btn-primary btn-dash" (click)="openCreateProvider()">
-            <span class="material-symbols-rounded">domain_add</span>
-            New provider
-          </button>
-        </div>
       } @else if (mode() === 'open') {
         <div class="tooltip tooltip-open tooltip-primary" data-tip="No open registrations! Register your first ...">
           <button class="btn btn-primary btn-dash" (click)="openRegisterTenant()">

@@ -19,7 +19,6 @@ interface ParticipantFeatureConfig {
   upload: ParticipantUploadConfig;
   fileSharing: ParticipantFileSharingConfig;
   siglet: ParticipantSigletConfig;
-  defaultServiceProviderId?: number;
 }
 
 const DEFAULT_CONFIG: ParticipantFeatureConfig = {
@@ -33,7 +32,6 @@ const DEFAULT_CONFIG: ParticipantFeatureConfig = {
   siglet: {
     baseUrl: 'http://edc-proxy.localhost/proxy/issuerservice',
   },
-  defaultServiceProviderId: 1,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -59,11 +57,6 @@ export class ParticipantConfigService {
 
   async getSigletConfig(): Promise<ParticipantSigletConfig> {
     return (await this.getConfig()).siglet;
-  }
-
-  async getDefaultServiceProviderId(): Promise<number | null> {
-    const value = (await this.getConfig()).defaultServiceProviderId;
-    return typeof value === 'number' ? value : null;
   }
 
   private async loadConfig(): Promise<ParticipantFeatureConfig> {
@@ -97,12 +90,7 @@ export class ParticipantConfigService {
             : DEFAULT_CONFIG.siglet.baseUrl,
       };
 
-      const defaultServiceProviderId =
-        typeof loaded.defaultServiceProviderId === 'number'
-          ? loaded.defaultServiceProviderId
-          : DEFAULT_CONFIG.defaultServiceProviderId;
-
-      return { upload, fileSharing, siglet, defaultServiceProviderId };
+      return { upload, fileSharing, siglet };
     } catch {
       return DEFAULT_CONFIG;
     }

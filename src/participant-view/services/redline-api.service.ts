@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
+import { SERVICE_PROVIDER_ID } from '../../operator-view/redline.constants';
 import {
   DataspaceResource,
   PartnerReferenceRequest,
@@ -22,11 +23,15 @@ export class RedlineApiService {
     return `${base}/api/ui`;
   }
 
+  private get tenantsUrl(): string {
+    return `${this.apiUrl}/service-providers/${SERVICE_PROVIDER_ID}/tenants`;
+  }
+
   async getParticipantDataspaces(): Promise<DataspaceResource[]> {
     const context = await this.contextService.resolve();
     return firstValueFrom(
       this.http.get<DataspaceResource[]>(
-        `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/dataspaces`,
+        `${this.tenantsUrl}/${context.tenantId}/participants/${context.participantId}/dataspaces`,
       ),
     );
   }
@@ -35,7 +40,7 @@ export class RedlineApiService {
     const context = await this.contextService.resolve();
     const response = await firstValueFrom(
       this.http.get<PartnerReference[] | PartnerReference>(
-        `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
+        `${this.tenantsUrl}/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
       ),
     );
 
@@ -50,19 +55,15 @@ export class RedlineApiService {
 
     return firstValueFrom(
       this.http.post<PartnerReference>(
-        `${this.apiUrl}/service-providers/${context.providerId}/tenants/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
+        `${this.tenantsUrl}/${context.tenantId}/participants/${context.participantId}/partners/${dataspaceId}`,
         partner,
       ),
     );
   }
 
-  async getTenants(serviceProviderId?: number): Promise<TenantResource[]> {
-    const context = await this.contextService.resolve();
-    const providerId = serviceProviderId ?? context.providerId;
+  async getTenants(): Promise<TenantResource[]> {
     const response = await firstValueFrom(
-      this.http.get<TenantResource[] | TenantResource>(
-        `${this.apiUrl}/service-providers/${providerId}/tenants`,
-      ),
+      this.http.get<TenantResource[] | TenantResource>(this.tenantsUrl),
     );
 
     return Array.isArray(response) ? response : response ? [response] : [];

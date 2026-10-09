@@ -5,9 +5,9 @@ keycloakagent
 Syncs Redline participants into Keycloak tenant users by polling the
 Redline UI API on a fixed interval (instead of reacting to NATS events).
 
-For every participant discovered in Redline it:
+For every participant under Redline's seeded service provider (ID 1) it:
 
-  1. walks the Redline UI API (service-providers -> tenants -> participants)
+  1. lists the seeded provider's tenants and participants via the Redline UI API
      to collect each participant's DID and the tenant (friendly) name,
   2. resolves the participant's `did:web` DID document and reads the
      ProtocolEndpoint service to derive the DSP protocol URL and the
@@ -119,18 +119,9 @@ def _bearer(token):
 # Redline UI API
 # ---------------------------------------------------------------------------
 
-def get_service_providers(session):
+def get_tenants(session):
     resp = session.get(
-        CONFIG.redline_url.rstrip("/") + "/api/ui/service-providers", timeout=30
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_tenants(session, service_provider_id):
-    resp = session.get(
-        f"{CONFIG.redline_url.rstrip('/')}/api/ui/service-providers/"
-        f"{service_provider_id}/tenants",
+        f"{CONFIG.redline_url.rstrip('/')}/api/ui/service-providers/1/tenants",
         timeout=30,
     )
     resp.raise_for_status()
@@ -138,22 +129,18 @@ def get_tenants(session, service_provider_id):
 
 
 def list_redline_participants(session):
-    """Walk Redline SPs -> tenants -> participants.
+    """List tenants and participants under the seeded Redline provider (ID 1).
 
     Returns a list of dicts: {did, tenant_name}.
     """
     participants = []
-    for sp in get_service_providers(session):
-        sp_id = sp.get("id")
-        if sp_id is None:
-            continue
-        for tenant in get_tenants(session, sp_id):
-            tenant_name = tenant.get("name") or ""
-            for participant in tenant.get("participants") or []:
-                did = participant.get("identifier")
-                if not did:
-                    continue
-                participants.append({"did": did, "tenant_name": tenant_name})
+    for tenant in get_tenants(session):
+        tenant_name = tenant.get("name") or ""
+        for participant in tenant.get("participants") or []:
+            did = participant.get("identifier")
+            if not did:
+                continue
+            participants.append({"did": did, "tenant_name": tenant_name})
     return participants
 
 
