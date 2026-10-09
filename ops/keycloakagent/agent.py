@@ -14,7 +14,9 @@ For every participant under Redline's seeded service provider (ID 1) it:
      participant context id,
   3. upserts the jwtlet mapping for the EDC proxy service account
      (mandatory: it grants the proxy its participant-scoped tokens),
-  4. creates or updates the tenant-user and tenant-admin accounts with their
+  4. registers the participant's Siglet HTTP-pull dataplane with the control
+     plane using a participant-scoped jwtlet management token,
+  5. creates or updates the tenant-user and tenant-admin accounts with their
      shared connector config (DID, protocol URL, management URL).
 
 Only create/update is performed; users absent from Redline are never removed.
@@ -49,6 +51,9 @@ class Config:
         # jwtlet
         self.jwtlet_management_url = os.environ.get(
             "JWTLET_MANAGEMENT_URL", "http://jwtlet.edc-v.svc:8081"
+        )
+        self.jwtlet_token_exchange_url = os.environ.get(
+            "JWTLET_TOKEN_EXCHANGE_URL", "http://jwtlet.edc-v.svc:8080"
         )
         self.jwtlet_token_file = os.environ.get(
             "JWTLET_TOKEN_FILE", "/var/run/secrets/jwtlet/token"
@@ -90,6 +95,14 @@ class Config:
         )
         self.keycloak_user_role = os.environ.get("KEYCLOAK_USER_ROLE", "tenant-user")
         self.keycloak_admin_role = os.environ.get("KEYCLOAK_TENANT_ADMIN_ROLE", "tenant-admin")
+
+        # Participant dataplane registration (cluster-internal endpoints)
+        self.controlplane_management_url = os.environ.get(
+            "CONTROLPLANE_MANAGEMENT_URL", "http://controlplane.edc-v.svc:8081/api/mgmt"
+        )
+        self.siglet_signaling_url = os.environ.get(
+            "SIGLET_SIGNALING_URL", "http://siglet.edc-v.svc:8081"
+        )
 
         # EDC proxy / JAD
         self.edc_proxy_base_url = os.environ.get(
@@ -241,6 +254,59 @@ def upsert_jwtlet_mapping(session, subject_token, participant_context_id):
         create.status_code,
         update.status_code,
     )
+
+
+# ---------------------------------------------------------------------------
+# Siglet dataplane registration
+# ---------------------------------------------------------------------------
+
+SIGLET_HTTP_PULL = "https://w3id.org/dspace-sig/profile/http-pull"
+
+
+def register_siglet_dataplane(session, subject_token, participant_context_id):
+    """Reconcile a stable registration; PUT is safe to repeat on every poll.
+
+    The agent exchanges its own projected token, not the proxy's identity.
+    Tokens remain local to this call and are never stored in user attributes.
+    """
+    token_endpoint = CONFIG.jwtlet_token_exchange_url.rstrip("/") + "/token"
+    exchange = session.post(
+        token_endpoint,
+        data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "subject_token": subject_token,
+            "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+            "resource": participant_context_id,
+            "scope": "management-api:admin",
+            "audience": CONFIG.jwtlet_audience,
+        },
+        timeout=30,
+    )
+    exchange.raise_for_status()
+    token = exchange.json().get("access_token")
+    if not isinstance(token, str) or not token.strip():
+        raise RuntimeError("jwtlet did not return a management access_token")
+
+    context = quote(participant_context_id, safe="")
+    response = session.put(
+        f"{CONFIG.controlplane_management_url.rstrip('/')}/v5/participants/{context}/dataplanes",
+        headers=_bearer(token),
+        json={
+            "dataplaneId": f"siglet-{participant_context_id}",
+            "endpoint": f"{CONFIG.siglet_signaling_url.rstrip('/')}/api/v1/{context}/dataflows",
+            "transferTypes": [SIGLET_HTTP_PULL],
+            "labels": [],
+            "authorization": {
+                "type": "oauth2_token_exchange",
+                "tokenExchangeEndpoint": token_endpoint,
+                "resource": participant_context_id,
+                "scope": "signaling",
+            },
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    log.info("registered Siglet dataplane for %s", participant_context_id)
 
 
 # ---------------------------------------------------------------------------
@@ -443,6 +509,11 @@ def sync_once(session):
             )
 
             upsert_jwtlet_mapping(session, subject_token, participant_context_id)
+            try:
+                register_siglet_dataplane(session, subject_token, participant_context_id)
+            except Exception:
+                # Retry on the next poll without blocking identity reconciliation.
+                log.exception("failed to register Siglet dataplane for %s", participant_context_id)
             username = did_connector_name(did)
             sync_keycloak_user(
                 session, admin_token, user_role, username, username,

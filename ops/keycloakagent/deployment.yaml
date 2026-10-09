@@ -59,6 +59,11 @@ spec:
               value: tenant-user
             - name: KEYCLOAK_TENANT_ADMIN_ROLE
               value: tenant-admin
+            # Reconcile each participant's Siglet HTTP-pull dataplane.
+            - name: CONTROLPLANE_MANAGEMENT_URL
+              value: http://controlplane.edc-v.svc:8081/api/mgmt
+            - name: SIGLET_SIGNALING_URL
+              value: http://siglet.edc-v.svc:8081
             - name: EDC_PROXY_BASE_URL
               value: http://edc-proxy.localhost/proxy
             - name: JAD_BASE_URL
