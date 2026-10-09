@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import document from '../../../public/config/jad-profile.json';
+import document from '../../../ops/jad-profile-seed/jad-profile.json';
 import { ConstraintEditorComponent } from './constraint-editor.component';
 import { AtomicBlock, PolicySchema } from './policy-schema';
 

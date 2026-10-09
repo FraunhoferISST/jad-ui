@@ -33,13 +33,14 @@ spec:
             httpGet:
               path: /realms/master
               port: http
-            initialDelaySeconds: 20
+            initialDelaySeconds: 50
             periodSeconds: 10
+            failureThreshold: 20
           livenessProbe:
             httpGet:
               path: /realms/master
               port: http
-            initialDelaySeconds: 40
+            initialDelaySeconds: 400
             periodSeconds: 20
           volumeMounts:
             - name: realm-import

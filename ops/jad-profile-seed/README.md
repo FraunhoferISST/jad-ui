@@ -9,8 +9,8 @@ Temporary standalone Kubernetes Job, intended to move into the JAD
 After control-plane readiness and jwtlet token exchange, it checks the required
 APIs, then creates or updates these resources in order:
 
-1. **CachedDocument** `jad-policy-profile-v1-schema`: the root
-   [`public/config/jad-profile.json`](../../public/config/jad-profile.json), cached as `JSON_SCHEMA` with URL
+1. **CachedDocument** `jad-policy-profile-v1-schema`: the shared
+   [`jad-profile.json`](jad-profile.json), cached as `JSON_SCHEMA` with URL
    `urn:jad:policy-profile:v1` and pull strategy `NEVER`.
 2. **CEL expressions**, from [`cel-expressions.json`](cel-expressions.json):
    - `membership_expr` → `MembershipCredential` (JAD Bruno registration).
@@ -52,25 +52,42 @@ causes the Job to fail rather than overwrite an unrelated record.
 
 ## Deploy / rerun
 
-From the repository root, run the helper (requires Bash and kubectl):
+From the repository root, deploy Keycloak (Gateway API), the identity-sync agent
+and this seed Job together:
 
 ```bash
-bash ops/jad-profile-seed/deploy.sh
+kubectl apply -k ops/
 kubectl -n edc-v logs -f job/jad-profile-seed
 kubectl -n edc-v wait --for=condition=complete job/jad-profile-seed --timeout=900s
 ```
 
-Use an absolute path to the helper when outside the repository. It renders the
-Kustomization, deletes only the previous `jad-profile-seed` Job (Jobs have an
-immutable pod template), generates the schema ConfigMap directly from the root
-JSON file, and applies the Job and generated code/settings ConfigMaps. No schema
-copy or permissive Kustomize load restriction is needed. `kubectl apply -k` alone
-requires the `jad-profile-schema` ConfigMap to have already been created.
+To deploy only the seed, use `kubectl apply -k ops/jad-profile-seed/`. Both entry
+points include the schema, code and settings ConfigMaps; no helper script or
+separate ConfigMap creation is required. This Kustomization generates the schema
+ConfigMap directly from the local [`jad-profile.json`](jad-profile.json).
+Angular's build and test asset configuration publishes only that JSON file at
+`config/jad-profile.json`, so the UI and seed share one source. No Kubernetes
+manifests are placed in `public/` or published by this asset mapping, and
+Kustomize's default load restrictions remain enabled.
+
+Applying an existing Job does not run it again. For an immediate rerun, wait for
+the current run to finish, then delete only the seed Job and reapply:
+
+```bash
+kubectl -n edc-v delete job jad-profile-seed --ignore-not-found --wait=true
+kubectl apply -k ops/
+```
+
+Otherwise, applying after TTL cleanup creates a new run. ConfigMap names stay
+stable so changes to the schema, script, expressions or settings do not change
+the Job's immutable pod template. If changing `job.yaml` while the Job still
+exists, delete the Job before applying the new template.
 
 Defaults target `controlplane.edc-v.svc.cluster.local:8081/api/mgmt` and
 `jwtlet.edc-v.svc.cluster.local:8080/token`. Edit `kustomization.yaml` for a different
-namespace, host, resource, scope, audience or timeout. The deployment helper
-reads its namespace from that file. If changing the Kubernetes subject-token
+host, resource, scope, audience or timeout. For a different namespace, update the
+`namespace` in `ops/kustomization.yaml` and the component Kustomizations, plus
+namespace-specific endpoint values. If changing the Kubernetes subject-token
 audience or service account, also edit `job.yaml` to match the platform mapping.
 Tokens are projected by Kubernetes and exchanged inside the Pod; no admin token
 is stored in a manifest or logged. Transport errors, HTTP 429 and 5xx responses
@@ -86,8 +103,8 @@ and schema ConfigMaps remain. Retrieve logs before TTL cleanup. The deadline is
 The binding has an empty profile filter, so every `v4:PolicyDefinition` creation
 request is checked against the JAD schema. `policy.profile` is optional; if
 supplied, the schema requires the string `urn:jad:policy-profile:v1`. Existing
-stored policies are not retroactively validated. Rerun the deployment helper to
-update an older, profile-filtered binding in the control plane.
+stored policies are not retroactively validated. Rerun the Job as described above
+to update an older, profile-filtered binding in the control plane.
 
 To test schema rejection without a profile, POST this one-permission body to
 `/v5/participants/{participantContextId}/policydefinitions`:
@@ -110,17 +127,21 @@ review the payloads before applying to production.
 
 ## Local checks
 
-No Chrome, cluster, third-party Python dependencies, or sibling checkout required:
+Requires Python and kubectl; no Chrome, cluster, third-party Python dependencies,
+or sibling checkout required:
 
 ```bash
 python3 -B -m unittest discover -s ops/jad-profile-seed -p 'test_*.py' -v
 kubectl kustomize ops/jad-profile-seed > /tmp/jad-profile-seed.yaml
-bash -n ops/jad-profile-seed/deploy.sh
+kubectl kustomize ops/ > /tmp/jad-ops.yaml
 ```
 
 Tests use a local HTTP server to check request bodies, jwtlet exchange,
 registration order, convergent reruns, token refresh, retries, and failure paths.
-When migrating to Helm, mount the same script and CEL payloads, package the root
+Manifest tests render the standalone seed, gateway-only Keycloak and combined
+`ops/` Kustomizations, checking schema content, ConfigMap references, resources
+and the schema-only Angular asset mapping.
+When migrating to Helm, mount the same script and CEL payloads, package the shared
 schema as chart content, and replace the Kustomize settings with chart values.
 Run after the platform's jwtlet/issuer seeds; no participant provisioning is
 required for these global registrations.

@@ -23,6 +23,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "jad-profile.json",
+                "input": "ops/jad-profile-seed",
+                "output": "config"
               }
             ],
             "styles": [
@@ -80,6 +85,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "jad-profile.json",
+                "input": "ops/jad-profile-seed",
+                "output": "config"
               }
             ],
             "styles": [

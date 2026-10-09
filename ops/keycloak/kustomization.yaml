@@ -6,3 +6,5 @@ resources:
   - configmap-realm.yaml
   - deployment.yaml
   - service.yaml
+  - gateway.yaml
+  - httproute.yaml

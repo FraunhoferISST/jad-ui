@@ -1,6 +1,6 @@
 import io
 import json
-import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -9,6 +9,7 @@ from collections import defaultdict, deque
 from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from textwrap import dedent
 from unittest.mock import patch
 from urllib.error import URLError
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -235,30 +236,71 @@ class SeedTests(unittest.TestCase):
         historical_source = (ROOT / "src/participant-view/utils/policy.utils.ts").read_text()
         self.assertIn(self.expressions[-1]["expression"], historical_source)
 
-    def test_deploy_script_uses_public_schema_and_recreates_only_its_job(self):
-        directory = Path(self.temp.name)
-        log = directory / "kubectl-calls.jsonl"
-        kubectl = directory / "kubectl"
-        kubectl.write_text("""#!/usr/bin/env python3
-import json, os, sys
-with open(os.environ['KUBECTL_TEST_LOG'], 'a') as log:
-    log.write(json.dumps(sys.argv[1:]) + '\\n')
-if sys.argv[1] == 'kustomize':
-    print('apiVersion: batch/v1\\nkind: Job\\nmetadata:\\n  name: jad-profile-seed')
-elif 'create' in sys.argv:
-    print('apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: jad-profile-schema')
-elif sys.argv[-1] == '-':
-    sys.stdin.read()
-""")
-        kubectl.chmod(0o755)
-        subprocess.run(["bash", str(DIRECTORY / "deploy.sh")], check=True, cwd=directory,
-                       env={**os.environ, "PATH": f"{directory}:{os.environ['PATH']}",
-                            "KUBECTL_TEST_LOG": str(log)}, capture_output=True, text=True)
-        calls = [json.loads(line) for line in log.read_text().splitlines()]
-        self.assertEqual(calls[0], ["kustomize", str(DIRECTORY)])
-        self.assertEqual(calls[1], ["-n", "edc-v", "delete", "job", "jad-profile-seed", "--ignore-not-found", "--wait=true"])
-        create = next(call for call in calls if "create" in call)
-        self.assertIn(f"--from-file=jad-profile.json={ROOT / 'public/config/jad-profile.json'}", create)
+
+class KustomizationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.manifests = {}
+        # Render with default load restrictions, without contacting a cluster.
+        for directory in (DIRECTORY, ROOT / "ops/keycloak", ROOT / "ops"):
+            rendered = subprocess.check_output(
+                ["kubectl", "kustomize", str(directory)], text=True,
+            )
+            documents = {}
+            for document in rendered.split("\n---\n"):
+                kind = re.search(r"^kind: (\S+)$", document, re.MULTILINE).group(1)
+                metadata = document.split("\nmetadata:\n", 1)[1].split("\nspec:\n", 1)[0]
+                name = re.search(r"^  name: (\S+)$", metadata, re.MULTILINE).group(1)
+                documents[kind, name] = document
+            cls.manifests[directory] = documents
+
+    def test_seed_includes_public_schema_and_stable_configmap_references(self):
+        schema_source = (ROOT / "public/config/jad-profile.json").read_text()
+        for directory in (DIRECTORY, ROOT / "ops"):
+            with self.subTest(directory=directory):
+                documents = self.manifests[directory]
+                schema_map = documents["ConfigMap", "jad-profile-schema"]
+                embedded = (
+                    schema_map.split("  jad-profile.json: |\n", 1)[1]
+                    .split("kind: ConfigMap\n", 1)[0]
+                )
+                self.assertEqual(dedent(embedded), schema_source)
+                job = documents["Job", "jad-profile-seed"]
+                for name in (
+                    "jad-profile-schema", "jad-profile-seed-code", "jad-profile-seed-settings",
+                ):
+                    self.assertIn(("ConfigMap", name), documents)
+                    self.assertRegex(job, rf"configMap(?:Ref)?:\n\s+name: {name}\n")
+                self.assertIn("serviceAccountName: seed-jobs\n", job)
+                self.assertIn("ttlSecondsAfterFinished: 3600", job)
+        self.assertEqual(len(self.manifests[DIRECTORY]), 4)
+
+    def test_keycloak_is_flat_and_gateway_only(self):
+        documents = self.manifests[ROOT / "ops/keycloak"]
+        self.assertEqual(set(documents), {
+            ("ConfigMap", "keycloak-realm-import"),
+            ("Secret", "keycloak-admin"),
+            ("Deployment", "keycloak"),
+            ("Service", "keycloak"),
+            ("Gateway", "keycloak-gateway"),
+            ("HTTPRoute", "keycloak"),
+        })
+        self.assertIn("gatewayClassName: traefik", documents["Gateway", "keycloak-gateway"])
+        self.assertIn("keycloak.jad.localhost", documents["HTTPRoute", "keycloak"])
+        self.assertFalse((ROOT / "ops/keycloak/base").exists())
+        self.assertFalse((ROOT / "ops/keycloak/overlays").exists())
+
+    def test_ops_combines_all_three_deployments_in_edc_v(self):
+        expected = set(self.manifests[DIRECTORY]) | set(self.manifests[ROOT / "ops/keycloak"]) | {
+            ("Deployment", "keycloakagent"),
+            ("Secret", "keycloakagent-admin"),
+            ("ConfigMap", "keycloakagent-config"),
+        }
+        documents = self.manifests[ROOT / "ops"]
+        self.assertEqual(set(documents), expected)
+        for identifier, document in documents.items():
+            with self.subTest(resource=identifier):
+                self.assertIn("\n  namespace: edc-v\n", document + "\n")
 
 
 if __name__ == "__main__":

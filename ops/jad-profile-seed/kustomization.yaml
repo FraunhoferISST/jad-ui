@@ -4,6 +4,9 @@ namespace: edc-v
 resources:
   - job.yaml
 configMapGenerator:
+  - name: jad-profile-schema
+    files:
+      - jad-profile.json
   - name: jad-profile-seed-code
     files:
       - seed.py
@@ -23,5 +26,7 @@ configMapGenerator:
       - READINESS_TIMEOUT_SECONDS=300
       - HTTP_ATTEMPTS=5
       - HTTP_RETRY_DELAY_SECONDS=2
+# Keep the Job's ConfigMap references stable: content updates must not change
+# its immutable pod template. Delete the Job before an immediate rerun.
 generatorOptions:
   disableNameSuffixHash: true

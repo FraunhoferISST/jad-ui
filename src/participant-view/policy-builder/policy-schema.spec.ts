@@ -1,4 +1,4 @@
-import document from '../../../public/config/jad-profile.json';
+import document from '../../../ops/jad-profile-seed/jad-profile.json';
 import { AtomicBlock, POLICY_PURPOSE_PROPERTY, PolicySchema, SchemaNode } from './policy-schema';
 
 function testPolicySchema(): PolicySchema {

@@ -31,8 +31,9 @@ deployment, backed by the Redline tenant-management API.
 - **Tenant-user views** — Files (including uploads under an admin-created contract
   definition) and Explore.
 - **Operator console** — Tenants and Open Registrations views for managing
-  service providers, dataspaces, tenants, and participant deployments via the
-  Redline backend.
+  dataspaces, tenants, and participant deployments via the Redline backend.
+  All tenant operations use the seeded service provider with ID `1`; provider
+  selection and creation are not supported.
 - **Role-based access** — A single source of truth (`ACCESS_RULES`) drives both
   route guards and menu filtering, so navigation and authorization never drift.
 - **Keycloak SSO auth** — Authentication is implemented via OAuth 2.0 / OIDC
@@ -70,6 +71,10 @@ deployment, backed by the Redline tenant-management API.
   `edc_connector_config`.
 - **Operators** see the Redline backend surfaced as a single connector with a
   custom health check; tenant operations go through `RedlineService`.
+- **Redline service provider** is always the seeded provider with ID `1`, for
+  public registration, operator actions, participant-context lookup and partner
+  requests. Redline must seed this provider before use; there is no configurable
+  provider ID or fallback to another provider.
 
 ## Prerequisites
 
@@ -106,12 +111,33 @@ can be replaced per environment without rebuilding:
 | `app-config.json` | Menu items, health-check interval, view descriptions |
 | `redline-config.json` | Redline backend base URL + DID prefix (operator) |
 | `auth-config.json` | Keycloak issuer/client and OIDC redirect settings |
+| `participant-config.json` | Upload limits, file-sharing URL, and authenticated Siglet token-proxy URL |
 
 If `redline-config.json` is missing or invalid, JAD UI falls back to built-in
 defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
 
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
+
+## Remote file downloads
+
+Owned files use the authenticated file-sharing API. Remote files in Explore use
+`TransferService.requestTransferAndDownload`: initiate the Siglet HTTP-pull
+profile, wait for `STARTED`, retrieve the transfer's `{ token, endpoint }` EDR
+from Siglet, fetch the endpoint with the transfer token, and download the Blob
+in the browser. This JAD deployment does not expose the EDC `/v3/edrs` API.
+
+`participant-config.json`'s `siglet.baseUrl` must point at a CORS-enabled,
+participant-scoped token proxy, not at a Siglet API expecting jwtlet tokens from
+the browser. Uploaded assets now include the owner's `participantContextId`
+and `fileId` in `dataplaneMetadata.properties`; Siglet must map both to the
+same-named download-token claims. Old assets need metadata migration or re-upload.
+
+See [download setup and verification](ops/transfer-download/README.md) for
+Siglet configuration, proxy authentication, and the verified browser flow.
+The checked-in `/proxy/issuerservice` URL is a **local compatibility mapping**
+to Siglet, not the normal issuer-service route; use a dedicated Siglet proxy in
+shared deployments. Keep `/proxy/default` on the control-plane health API.
 
 ## Policy Builder
 
@@ -121,9 +147,10 @@ constraint-sidebar / constraint-editor / preview workflow, implemented with this
 application's Angular and daisyUI components rather than its hard-coded Catena-X
 building-block catalog.
 
-The builder fetches `config/jad-profile.json`, served directly from
-`public/config/jad-profile.json`. That public file is the single source used by
-both the builder and the seed helper; no additional root asset copy is needed.
+The builder fetches `config/jad-profile.json`. Its single source is
+`ops/jad-profile-seed/jad-profile.json`, used directly by the seed Kustomization.
+Angular's build and test asset configuration publishes only that JSON at the
+existing URL; Kubernetes manifests remain outside the web assets.
 At deployment the served JSON can be replaced like other runtime configuration;
 reload the view to load changes. Keep it aligned with the control-plane schema
 cache by rerunning the profile seed when changing the schema.
@@ -173,27 +200,47 @@ No new Keycloak role or mapper is required: the existing `tenant-admin` role
 controls both navigation and route access. The schema is a static authoring
 asset, so the view does not need the platform-admin-only cached-document API.
 
+## Deploy Kubernetes dev services
+
+The three deployable components under `ops/` — Keycloak, `keycloakagent` and
+`jad-profile-seed` — share one Kustomize entry point. After the platform's
+jwtlet/issuer seeds have completed, deploy all three from the repository root:
+
+```bash
+kubectl apply -k ops/
+```
+
+The `edc-v` namespace and platform services/service accounts (`seed-jobs` and
+`cfm-agents`) must already exist. Keycloak requires Gateway API CRDs and a
+controller with GatewayClass `traefik`; only gateway mode is supported.
+For the seed's API and permission requirements, see
+[its prerequisites](ops/jad-profile-seed/README.md#prerequisites).
+Each component can also be applied separately with `kubectl apply -k ops/<component>/`.
+
 ## JAD policy profile seed
 
-`public/config/jad-profile.json` defines the JAD policy authoring schema.
+`ops/jad-profile-seed/jad-profile.json` defines the JAD policy authoring schema.
 [`ops/jad-profile-seed/`](ops/jad-profile-seed/README.md) provides a temporary
 standalone Kubernetes Job to cache that schema, register its validator for all
 policy-definition creation requests, and register the membership, manufacturer and
 counterparty CEL expressions. It will move to the JAD dataspace-profile Helm
 chart later.
 
-After the platform's jwtlet/issuer seeds have completed:
+The unified `kubectl apply -k ops/` deployment includes this Job and generates
+its schema ConfigMap directly from the same JSON file used by the UI. Follow
+its progress with:
 
 ```bash
-bash ops/jad-profile-seed/deploy.sh
 kubectl -n edc-v logs -f job/jad-profile-seed
 ```
 
 The Job requires the platform's existing `seed-jobs` service account and a
 control-plane image with the document-cache, CEL and schema-validation APIs.
 It uses jwtlet's `admin` scope, not a UI role. Reruns update managed registrations;
-the schema applies even when `policy.profile` is omitted.
-See the seed README for prerequisites, configuration and local tests.
+the schema applies even when `policy.profile` is omitted. Applying an existing
+Job does not rerun it: delete the completed Job first or wait for its one-hour
+TTL cleanup, then reapply. See the seed README for rerun commands, prerequisites,
+configuration and local tests.
 
 ## Authentication & roles
 
@@ -226,10 +273,10 @@ Kubernetes manifests for local development are under `ops/keycloak/`.
 127.0.0.1 keycloak.jad.localhost
 ```
 
-2) Deploy Keycloak:
+2) Deploy all dev services (or only Keycloak with `kubectl apply -k ops/keycloak/`):
 
 ```bash
-kubectl apply -k ops/keycloak/overlays/gateway
+kubectl apply -k ops/
 ```
 
 3) Verify:
@@ -240,12 +287,10 @@ kubectl -n edc-v get gateways.gateway.networking.k8s.io
 kubectl -n edc-v get httproutes.gateway.networking.k8s.io
 ```
 
-If your cluster does not have Gateway API support, use the ingress overlay:
-
-```bash
-kubectl apply -k ops/keycloak/overlays/ingress
-kubectl -n edc-v get ingress
-```
+Gateway API support and GatewayClass `traefik` are required; there is no ingress
+overlay. If migrating from the old ingress deployment, delete its existing
+Ingress (`kubectl -n edc-v delete ingress keycloak --ignore-not-found`) because
+`kubectl apply` does not remove resources omitted from the manifests.
 
 Keycloak will be available at `http://keycloak.jad.localhost` and the imported
 realm issuer at `http://keycloak.jad.localhost/realms/jad-dev`.
@@ -261,25 +306,54 @@ The realm import config creates:
 ### Sync Redline participants with Keycloak
 A background agent (`keycloakagent`) keeps participant identities in sync
 automatically. It runs in the cluster and, every 60 seconds, polls the Redline
-UI API (`service-providers` → `tenants` → `participants`), resolves each
-participant's `did:web` document to derive its DSP protocol URL and participant
-context id, upserts the jwtlet mapping for the EDC proxy service account, and
-creates/updates both Keycloak users with the same `edc_connector_config`
+UI API for tenants and participants under the seeded service provider with ID
+`1` (`/api/ui/service-providers/1/tenants`), resolves each participant's
+`did:web` document to derive its DSP protocol URL and participant
+context id, upserts the jwtlet mapping for the EDC proxy service account,
+registers each participant's Siglet HTTP-pull dataplane with the control plane,
+and creates/updates both Keycloak users with the same `edc_connector_config`
 claim. The existing username receives `tenant-user`; `<username>-admin` receives
 `tenant-admin`. Old `participant` role mappings are removed from synced users. Only create/update is performed — users no
 longer present in Redline are never removed.
 
-Deploy it alongside JAD (see `ops/keycloakagent/`):
+The unified `kubectl apply -k ops/` deployment includes the agent (see
+`ops/keycloakagent/`). When updating its code or configuration, reapply and
+restart it:
 
 ```bash
-kubectl apply -k ops/keycloakagent
+kubectl apply -k ops/
+# The ConfigMap has a stable name; restart after agent.py-only changes too.
+kubectl -n edc-v rollout restart deployment/keycloakagent
+kubectl -n edc-v rollout status deployment/keycloakagent
 ```
+
+Dataplane registration uses the agent's projected Kubernetes service-account
+token exchanged at jwtlet for `resource=<participant context id>` and
+`scope=management-api:admin`. The `cfm-agents` identity must already have that
+participant-scoped permission; the agent does not broaden its own mapping.
+Every poll repeats `PUT /v5/participants/{id}/dataplanes` with the stable ID
+`siglet-{id}`, the Siglet HTTP-pull profile, and `signaling` token-exchange
+authorization. Registration failures are logged and retried on the next poll
+without blocking Keycloak user updates. No machine token is put in user claims.
+
+Cluster-internal registration endpoints are configurable in
+`ops/keycloakagent/deployment.yaml`:
+
+- `CONTROLPLANE_MANAGEMENT_URL` — management base, including `/api/mgmt`.
+- `SIGLET_SIGNALING_URL` — Siglet signaling base (port 8081).
+- `JWTLET_TOKEN_EXCHANGE_URL` — jwtlet token-exchange base (port 8080; the agent appends `/token`).
+- `JWTLET_AUDIENCE` — exchanged token audience (default `edcv`).
+
+See [remote download setup and browser verification](ops/transfer-download/README.md).
+Run agent tests with `python -m unittest discover -s ops/keycloakagent -v`
+(requires `requests` and `kubectl` for the rendered ConfigMap check).
 
 The agent uses the path of the DID `did:web:identity.jad.localhost:<path>` as both username
 and password for the tenant-user in dev. The admin login is `<path>-admin` with password `admin`.
 
-Both logins currently use the same EDC proxy service-account jwtlet mapping, which retains
-its existing scopes. Restricting EDC scopes per login requires separate proxy/token identities;
+Both logins currently use the same EDC proxy service-account jwtlet mapping.
+The deployment explicitly sets `JWTLET_SCOPES` to retain the existing management
+scopes and add `siglet-token` for participant-bound transfer-token retrieval. Restricting EDC scopes per login requires separate proxy/token identities;
 the UI role split alone does not enforce backend least privilege.
 
 ## Project structure
@@ -304,6 +378,9 @@ src/
 │   └── tenant-view/         # tenants & open-registrations UI
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config
-public/config/jad-profile.json # JAD ODRL policy authoring schema
+ops/jad-profile-seed/jad-profile.json # shared schema; served at config/jad-profile.json
+ops/kustomization.yaml       # deploy all three dev components with kubectl apply -k ops/
+ops/keycloak/                 # flat Gateway API-only Keycloak deployment
+ops/keycloakagent/            # Redline participant identity sync
 ops/jad-profile-seed/         # temporary schema + CEL registration Job
 ```
