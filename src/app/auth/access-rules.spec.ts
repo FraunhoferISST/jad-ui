@@ -28,7 +28,17 @@ describe('canAccess', () => {
   });
 
   it('restricts dashboard and partner routes to tenant-admin', () => {
-    for (const path of ['catalog', 'assets', 'policies', 'policy-builder', 'contract-definitions', 'contracts', 'transfer-history', 'partners']) {
+    for (const path of [
+      'catalog',
+      'assets',
+      'policies',
+      'policy-builder',
+      'contract-definitions',
+      'contracts',
+      'transfer-history',
+      'partners',
+      'dataspaces',
+    ]) {
       expect(canAccess(path, 'tenant-admin')).toBe(true);
       expect(canAccess(path, 'tenant-user')).toBe(false);
       expect(canAccess(path, 'operator')).toBe(false);

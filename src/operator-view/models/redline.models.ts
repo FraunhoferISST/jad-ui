@@ -78,10 +78,12 @@ export interface Tenant {
   properties?: Record<string, unknown>;
 }
 
-/** Request body to register a new tenant under a service provider. */
+/**
+ * UI data for registering a tenant. Membership is managed separately;
+ * RedlineService adds an explicitly empty dataspaceInfos list to the request.
+ */
 export interface TenantRegistration {
   tenantName: string;
-  dataspaceInfos?: DataspaceInfo[];
   properties?: Record<string, unknown>;
 }
 

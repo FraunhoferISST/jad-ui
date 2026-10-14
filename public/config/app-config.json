@@ -9,6 +9,12 @@
       "divider": true
     },
     {
+      "text": "Dataspaces",
+      "materialSymbol": "hub",
+      "routerPath": "dataspaces",
+      "viewDescription": "Join dataspaces and manage the tenant's membership roles, agreement types and properties. Leaving removes membership and partner references without deprovisioning participant resources."
+    },
+    {
       "text": "Partners",
       "materialSymbol": "groups",
       "routerPath": "partners",

@@ -1,7 +1,8 @@
 <form
   [formGroup]="form"
   (ngSubmit)="submit()"
-  class="grid grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0">
+  class="grid grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0"
+>
   <h1 class="text-xl text-center divider m-0">Register Tenant</h1>
 
   <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">
@@ -9,7 +10,8 @@
     <legend class="fieldset-label">Tenant Name</legend>
     <label
       class="input flex items-center tooltip tooltip-info tooltip-top w-full"
-      data-tip="A participant profile is created automatically for the tenant">
+      data-tip="A participant profile is created automatically for the tenant"
+    >
       <span class="material-symbols-rounded opacity-50">person_add</span>
       <input type="text" class="grow" placeholder="Tenant Name" formControlName="tenantName" />
       <span class="badge badge-error">Required</span>
@@ -23,41 +25,22 @@
         class="grow"
         readonly
         placeholder="Enter a tenant name to generate a DID"
-        [value]="generatedDid" />
+        [value]="generatedDid"
+      />
       <span class="badge badge-warning">Readonly</span>
     </label>
   </fieldset>
 
-  <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">
-    <legend class="fieldset-legend text-sm">
-      Dataspaces
-    </legend>
-    @if (dataspacesArray.length === 0) {
-      <div role="alert" class="alert alert-warning alert-soft">
-        <span class="material-symbols-rounded">info</span>
-        <span>No dataspaces available. Create a dataspace first to join one.</span>
-      </div>
-    } @else {
-      <div formArrayName="dataspaces">
-        @for (group of dataspacesArray.controls; track $index) {
-          <div [formGroupName]="$index" class="bg-base-100 border border-base-300 p-3 rounded-box mb-2 last:mb-0">
-            <label class="label cursor-pointer justify-start gap-2">
-              <input type="checkbox" class="checkbox checkbox-sm" formControlName="selected" />
-              <span class="font-medium">{{ group.value.name }}</span>
-              <span class="text-xs opacity-60">#{{ group.value.dataspaceId }}</span>
-            </label>
-          </div>
-        }
-      </div>
-      @if (dataspacesArray.invalid) {
-        <p class="text-xs text-error mt-1">Select at least one dataspace.</p>
-      }
-    }
-  </fieldset>
+  <p class="text-sm text-base-content/60">
+    Registration does not join a dataspace. The tenant admin manages membership after onboarding.
+  </p>
 
   <fieldset class="fieldset w-full bg-base-200 border border-base-300 p-4 rounded-box">
     <legend class="fieldset-legend text-sm">Properties</legend>
-    <lib-json-object-input [object]="properties" (objectChange)="properties = $event"></lib-json-object-input>
+    <lib-json-object-input
+      [object]="properties"
+      (objectChange)="properties = $event"
+    ></lib-json-object-input>
   </fieldset>
 
   <div class="flex flex-col items-center">

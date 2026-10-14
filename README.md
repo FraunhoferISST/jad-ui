@@ -18,6 +18,7 @@ deployment, backed by the Redline tenant-management API.
 - [Prerequisites](#prerequisites)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
+- [Tenant dataspace membership](#tenant-dataspace-membership)
 - [Policy Builder](#policy-builder)
 - [JAD policy profile seed](#jad-policy-profile-seed)
 - [Authentication & roles](#authentication--roles)
@@ -28,6 +29,9 @@ deployment, backed by the Redline tenant-management API.
 - **EDC participant views** — Home, Catalog, Assets, Policy Definitions,
   Contract Definitions, Contracts, and Transfer History, all provided by the
   `@eclipse-edc/dashboard-core` library and lazy-loaded per route for tenant admins.
+- **Tenant-admin dataspace view** — Join dataspaces, edit membership metadata, and
+  leave dataspaces for the logged-in admin's tenant via Redline. Registration
+  creates tenants without assigning dataspace membership.
 - **Tenant-user views** — Files (including uploads under an admin-created contract
   definition) and Explore.
 - **Operator console** — Tenants and Open Registrations views for managing
@@ -58,11 +62,11 @@ deployment, backed by the Redline tenant-management API.
                                                   │
                ┌───────────────────────────────────┼──────────────────────────────┐
                ▼                                   ▼                              ▼
-    tenant-admin (EDC + Partners)       tenant-user (Files, Explore)      operator (Tenants)
-    catalog / assets / policies /       ──► file sharing + EDC           ──► Redline API
-    policy-builder / contracts          shared Home for all roles
-    contract-definitions
-    ──► EDC connectors
+    tenant-admin (EDC + custom)         tenant-user (Files, Explore)      operator (Tenants)
+    dataspaces / partners / catalog      ──► file sharing + EDC           ──► Redline API
+    assets / policies / policy-builder   shared Home for all roles
+    contracts / contract-definitions
+    ──► EDC connectors + Redline
 ```
 
 - The authenticated **shell** owns the router-outlet and renders navigation from
@@ -72,9 +76,9 @@ deployment, backed by the Redline tenant-management API.
 - **Operators** see the Redline backend surfaced as a single connector with a
   custom health check; tenant operations go through `RedlineService`.
 - **Redline service provider** is always the seeded provider with ID `1`, for
-  public registration, operator actions, participant-context lookup and partner
-  requests. Redline must seed this provider before use; there is no configurable
-  provider ID or fallback to another provider.
+  public registration, operator actions, participant-context lookup, dataspace
+  membership and partner requests. Redline must seed this provider before use;
+  there is no configurable provider ID or fallback to another provider.
 
 ## Prerequisites
 
@@ -109,7 +113,7 @@ can be replaced per environment without rebuilding:
 | File | Purpose |
 | --- | --- |
 | `app-config.json` | Menu items, health-check interval, view descriptions |
-| `redline-config.json` | Redline backend base URL + DID prefix (operator) |
+| `redline-config.json` | Redline backend base URL + participant DID prefix |
 | `auth-config.json` | Keycloak issuer/client and OIDC redirect settings |
 | `participant-config.json` | Upload limits, file-sharing URL, and authenticated Siglet token-proxy URL |
 
@@ -138,6 +142,38 @@ Siglet configuration, proxy authentication, and the verified browser flow.
 The checked-in `/proxy/issuerservice` URL is a **local compatibility mapping**
 to Siglet, not the normal issuer-service route; use a dedicated Siglet proxy in
 shared deployments. Keep `/proxy/default` on the control-plane health API.
+
+## Tenant dataspace membership
+
+The public `/register` form and the operator's Register Tenant form collect tenant
+data only. `RedlineService.registerTenant` explicitly sends `dataspaceInfos: []`;
+registration never joins a dataspace and does not require any dataspaces to exist.
+
+After the operator deploys the participant and the admin can sign in, the
+**Dataspaces** view at `/dataspaces` manages memberships for that tenant.
+`ParticipantContextService` resolves the authenticated participant's DID to its
+Redline tenant; there is no tenant/provider selector. The view reads all available
+dataspaces and the tenant's memberships across its participants.
+
+- **Join / Save membership** uses
+  `POST /api/ui/service-providers/1/tenants/{tenantId}/dataspaces` with a
+  `DataspaceInfo` body. Roles and agreement types are comma-separated; properties
+  must be a JSON object. Existing values are prefilled and all metadata fields
+  are sent on save because omitted fields are reset by Redline. Partner references
+  are preserved when updating.
+- **Leave** uses
+  `DELETE /api/ui/service-providers/1/tenants/{tenantId}/dataspaces/{dataspaceId}`.
+  Confirmation warns that membership and partner references are removed from
+  **all** of the tenant's participants.
+- These APIs manage **local membership metadata only**. They do not deploy or
+  deprovision participant resources or issue/revoke credentials. Redline selects
+  an existing membership's participant; joining a new dataspace is rejected if
+  participant selection is ambiguous. Backend errors are shown without silently
+  changing membership state.
+
+The existing `tenant-admin` role controls both route access and menu visibility;
+no new Keycloak role, mapper, token claim, or identity-sync behavior is needed.
+Backend authorization remains Redline's responsibility.
 
 ## Policy Builder
 
@@ -249,7 +285,7 @@ Auth is abstracted behind `AuthProvider`. The shipped
 
 Three realm roles are supported:
 
-- **tenant-admin** — Partners, Policy Builder and EDC views (catalog, assets, policies, contract definitions, contracts, transfers).
+- **tenant-admin** — Dataspaces, Partners, Policy Builder and EDC views (catalog, assets, policies, contract definitions, contracts, transfers).
 - **tenant-user** — Files and Explore. Uploads reuse an existing contract definition and its policies; the tenant admin creates the definition.
 - **operator** — operator console (tenants, open registrations).
 
@@ -368,13 +404,14 @@ src/
 │   ├── registration/        # public tenant-registration form
 │   └── shell/               # dashboard shell wrapper + user menu
 ├── participant-view/
+│   ├── dataspaces/          # tenant-admin membership management via Redline
 │   ├── policy-builder/      # schema-driven ODRL builder and validation
 │   ├── edc-controllers/     # custom management API controllers
 │   └── files/ explore/ partners/ services/ models/ utils/
 ├── operator-view/
 │   ├── redline.config.ts    # REDLINE_CONFIG token + APP_INITIALIZER loader
 │   ├── services/            # RedlineService (tenants, dataspaces, deploy)
-│   ├── models/ util/ validators/
+│   ├── models/ util/
 │   └── tenant-view/         # tenants & open-registrations UI
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config

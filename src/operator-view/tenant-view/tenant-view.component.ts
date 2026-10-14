@@ -177,7 +177,7 @@ export class TenantViewComponent implements OnInit, OnDestroy {
   openRegisterTenant(): void {
     this.modalAndAlert.openModal(
       TenantFormComponent,
-      { dataspaces: this.dataspaces() },
+      {},
       {
         save: (registration: TenantRegistration) => void this.registerTenant(registration),
         cancel: () => this.modalAndAlert.closeModal(),

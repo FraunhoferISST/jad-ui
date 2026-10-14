@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { REDLINE_CONFIG } from '../redline.config';
 import { SERVICE_PROVIDER_ID } from '../redline.constants';
 import {
+  DataspaceInfo,
   DataspaceRequest,
   DataspaceResponse,
   HealthResponse,
@@ -110,7 +111,35 @@ export class RedlineService {
    * @returns A promise resolving to the registered tenant.
    */
   registerTenant(registration: TenantRegistration): Promise<Tenant> {
-    return firstValueFrom(this.http.post<Tenant>(this.tenantsUrl, registration));
+    // Explicitly send an empty list: registration must never assign membership,
+    // including on backends that expect dataspaceInfos to be present.
+    return firstValueFrom(
+      this.http.post<Tenant>(this.tenantsUrl, {
+        tenantName: registration.tenantName,
+        ...(registration.properties ? { properties: registration.properties } : {}),
+        dataspaceInfos: [],
+      }),
+    );
+  }
+
+  /**
+   * Adds or updates local tenant membership metadata, preserving partner references.
+   * This does not deploy participant resources.
+   */
+  onboardTenantToDataspace(tenantId: number, info: DataspaceInfo): Promise<Tenant> {
+    return firstValueFrom(
+      this.http.post<Tenant>(`${this.tenantsUrl}/${tenantId}/dataspaces`, info),
+    );
+  }
+
+  /**
+   * Removes membership and partner references from all participants of the tenant.
+   * This does not deprovision participant resources.
+   */
+  offboardTenantFromDataspace(tenantId: number, dataspaceId: number): Promise<Tenant> {
+    return firstValueFrom(
+      this.http.delete<Tenant>(`${this.tenantsUrl}/${tenantId}/dataspaces/${dataspaceId}`),
+    );
   }
 
   // --- Participants --------------------------------------------------------

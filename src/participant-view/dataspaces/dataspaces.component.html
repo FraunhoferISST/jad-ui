@@ -1,0 +1,298 @@
+<section class="flex flex-col gap-6" [attr.aria-busy]="loading() || busy()">
+  <div id="available-dataspaces" class="card bg-base-200 border border-base-300 shadow-xl">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="card-title">Dataspace management</h1>
+          <p class="text-sm text-base-content/70">
+            @if (tenant(); as currentTenant) {
+              Join dataspaces and manage membership for {{ currentTenant.name }}.
+            } @else {
+              Join dataspaces and manage tenant membership.
+            }
+            This changes metadata only, not participant resources or credentials.
+          </p>
+        </div>
+        <button class="btn" type="button" [disabled]="loading() || busy()" (click)="refresh()">
+          @if (loading()) {
+            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            Refreshing
+          } @else {
+            <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
+            Refresh
+          }
+        </button>
+      </div>
+
+      @if (error()) {
+        <div role="alert" class="alert alert-error">
+          <span>{{ error() }}</span>
+        </div>
+      }
+      @if (success()) {
+        <div role="status" class="alert alert-success">
+          <span>{{ success() }}</span>
+        </div>
+      }
+
+      <div class="card bg-base-100 border border-base-300">
+        <div class="card-body gap-3">
+          <h2 class="card-title text-base">Join dataspaces</h2>
+          <p class="text-sm text-base-content/70">
+            Select a dataspace you have not joined yet and configure its membership.
+          </p>
+
+          <label class="input w-full">
+            <span class="material-symbols-rounded opacity-70" aria-hidden="true">search</span>
+            <input
+              #availableSearchInput
+              type="text"
+              aria-label="Search available dataspaces"
+              [value]="availableSearch()"
+              (input)="availableSearch.set(availableSearchInput.value)"
+              placeholder="Search dataspaces by name or ID"
+            />
+          </label>
+
+          <div class="max-h-72 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
+            @if (loading()) {
+              <div role="status" class="flex items-center justify-center py-8">
+                <span
+                  class="loading loading-bars loading-lg text-primary"
+                  aria-hidden="true"
+                ></span>
+                <span class="sr-only">Loading available dataspaces…</span>
+              </div>
+            } @else {
+              @for (entry of unjoinedEntries(); track entry.id) {
+                <button
+                  [id]="'available-dataspace-' + entry.id"
+                  class="btn btn-ghost mb-1 h-auto min-h-0 w-full justify-start py-2"
+                  type="button"
+                  [disabled]="busy() || !tenant()"
+                  [attr.aria-pressed]="selectedDataspace()?.id === entry.id"
+                  (click)="toggleDataspaceSelection(entry)"
+                >
+                  <input
+                    class="checkbox checkbox-sm pointer-events-none"
+                    type="checkbox"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    [checked]="selectedDataspace()?.id === entry.id"
+                  />
+                  <span class="text-left">
+                    <span class="block text-sm">{{ entry.name }}</span>
+                    <span class="block text-xs text-base-content/70"
+                      >Dataspace #{{ entry.id }}</span
+                    >
+                  </span>
+                </button>
+              } @empty {
+                <p class="px-2 py-3 text-sm text-base-content/70">
+                  {{
+                    tenant() && entries().length === 0
+                      ? 'No dataspaces are available yet.'
+                      : 'No available dataspaces to join.'
+                  }}
+                </p>
+              }
+            }
+          </div>
+
+          <div class="rounded-box border border-base-300 bg-base-200 p-3">
+            @if (selectedDataspace(); as entry) {
+              <p class="mb-2 text-sm font-medium">Selected</p>
+              <div class="flex flex-wrap gap-2">
+                <span class="badge badge-soft">{{ entry.name }}</span>
+              </div>
+            } @else {
+              <p class="text-sm text-base-content/70">No dataspace selected.</p>
+            }
+          </div>
+
+          @if (selectedDataspace()) {
+            <ng-container [ngTemplateOutlet]="membershipEditor"></ng-container>
+          } @else {
+            <div class="card-actions justify-end gap-2">
+              <button class="btn btn-ghost" type="button" disabled>Clear</button>
+              <button class="btn btn-primary" type="button" disabled>
+                <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                Join dataspace
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="joined-dataspaces" class="card bg-base-200 border border-base-300 shadow-xl">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="card-title">Joined dataspaces</h2>
+        <label class="input w-full max-w-xs">
+          <span class="material-symbols-rounded opacity-70" aria-hidden="true">search</span>
+          <input
+            #joinedSearchInput
+            type="text"
+            aria-label="Filter joined dataspaces"
+            [value]="joinedSearch()"
+            (input)="joinedSearch.set(joinedSearchInput.value)"
+            placeholder="Filter dataspaces"
+          />
+        </label>
+      </div>
+
+      @if (editing()?.membership) {
+        <div class="card bg-base-100 border border-base-300">
+          <div class="card-body gap-3">
+            <ng-container [ngTemplateOutlet]="membershipEditor"></ng-container>
+          </div>
+        </div>
+      }
+
+      @if (loading()) {
+        <div role="status" class="flex items-center justify-center py-8">
+          <span class="loading loading-bars loading-lg text-primary" aria-hidden="true"></span>
+          <span class="sr-only">Loading joined dataspaces…</span>
+        </div>
+      } @else if (joinedEntries().length === 0) {
+        <div class="rounded-box border border-base-300 bg-base-100 p-8 text-center">
+          <span class="material-symbols-rounded text-3xl opacity-60" aria-hidden="true">hub</span>
+          <p class="mt-2 font-medium">No joined dataspaces found</p>
+          <p class="text-sm text-base-content/70">Try another filter or join a dataspace above.</p>
+        </div>
+      } @else {
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          @for (entry of joinedEntries(); track entry.id) {
+            <article class="card bg-base-100 border border-base-300" [id]="'dataspace-' + entry.id">
+              <div class="card-body gap-3">
+                <h3 class="card-title text-base">{{ entry.name }}</h3>
+                <div class="text-xs text-base-content/70 break-all">Dataspace #{{ entry.id }}</div>
+                @if (entry.membership; as info) {
+                  <p class="text-sm text-base-content/70">
+                    Roles: {{ info.roles?.join(', ') || 'None' }}
+                  </p>
+                  <p class="text-sm text-base-content/70">
+                    Agreement types: {{ info.agreementTypes?.join(', ') || 'None' }}
+                  </p>
+                }
+                @if (pendingLeave() === entry.id) {
+                  <div role="alert" class="alert alert-warning">
+                    <div class="flex flex-col gap-3">
+                      <p>
+                        Leave {{ entry.name }}? This removes membership and partner references from
+                        all participants of this tenant. Participant resources remain deployed.
+                      </p>
+                      <div class="flex flex-wrap gap-2">
+                        <button
+                          class="btn btn-sm btn-ghost"
+                          type="button"
+                          [disabled]="busy()"
+                          (click)="cancelLeave()"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          class="btn btn-sm btn-error"
+                          type="button"
+                          [disabled]="busy()"
+                          (click)="leave(entry)"
+                        >
+                          @if (busy()) {
+                            <span
+                              class="loading loading-spinner loading-xs"
+                              aria-hidden="true"
+                            ></span>
+                          } @else {
+                            <span class="material-symbols-rounded" aria-hidden="true">logout</span>
+                          }
+                          Confirm leave
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="card-actions justify-end">
+                    <button
+                      class="btn btn-sm"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="edit(entry)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                      Manage membership
+                    </button>
+                    <button
+                      class="btn btn-sm"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="requestLeave(entry)"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">logout</span>
+                      Leave
+                    </button>
+                  </div>
+                }
+              </div>
+            </article>
+          }
+        </div>
+      }
+
+      @if (!loading()) {
+        <p class="text-sm text-base-content/70">
+          {{ joinedEntries().length }} joined dataspace(s) shown
+        </p>
+      }
+    </div>
+  </div>
+</section>
+
+<ng-template #membershipEditor>
+  @if (editing(); as entry) {
+    <form [formGroup]="form" (ngSubmit)="save()" class="flex flex-col gap-3">
+      <h3 class="card-title text-base">
+        {{ entry.membership ? 'Manage' : 'Join' }} {{ entry.name }}
+      </h3>
+      <fieldset class="fieldset" [disabled]="busy()">
+        <label for="dataspace-roles" class="label">Roles (comma-separated)</label>
+        <input id="dataspace-roles" class="input w-full" formControlName="roles" />
+        <label for="dataspace-agreements" class="label">Agreement types (comma-separated)</label>
+        <input id="dataspace-agreements" class="input w-full" formControlName="agreementTypes" />
+        <label for="dataspace-properties" class="label">Membership properties (JSON object)</label>
+        <textarea
+          id="dataspace-properties"
+          class="textarea w-full font-mono"
+          rows="5"
+          formControlName="properties"
+          aria-describedby="dataspace-properties-help"
+          [attr.aria-invalid]="form.controls.properties.invalid"
+        ></textarea>
+        <p id="dataspace-properties-help" class="text-sm text-base-content/70">
+          @if (form.controls.properties.invalid) {
+            <span class="text-error">Enter a valid JSON object, not an array or primitive.</span>
+          } @else {
+            Leave fields empty to clear their values. Updating membership preserves partner
+            references.
+          }
+        </p>
+      </fieldset>
+      <div class="card-actions justify-end gap-2">
+        <button class="btn btn-ghost" type="button" [disabled]="busy()" (click)="cancelEdit()">
+          {{ entry.membership ? 'Cancel' : 'Clear' }}
+        </button>
+        <button class="btn btn-primary" type="submit" [disabled]="form.invalid || busy()">
+          @if (busy()) {
+            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+          } @else {
+            <span class="material-symbols-rounded" aria-hidden="true">{{
+              entry.membership ? 'save' : 'add'
+            }}</span>
+          }
+          {{ entry.membership ? 'Save membership' : 'Join dataspace' }}
+        </button>
+      </div>
+    </form>
+  }
+</ng-template>

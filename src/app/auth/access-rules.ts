@@ -18,6 +18,7 @@ export const ACCESS_RULES: Record<string, Role[]> = {
   files: ['tenant-user'],
   explore: ['tenant-user'],
   partners: ['tenant-admin'],
+  dataspaces: ['tenant-admin'],
   policies: ['tenant-admin'],
   'policy-builder': ['tenant-admin'],
   'contract-definitions': ['tenant-admin'],

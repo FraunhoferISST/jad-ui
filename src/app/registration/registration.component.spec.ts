@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { RedlineService } from '../../operator-view/services/redline.service';
@@ -12,7 +12,7 @@ describe('RegistrationComponent', () => {
       'getDataspaces',
       'registerTenant',
     ]);
-    redline.getDataspaces.and.resolveTo([{ id: 2, name: 'Demo dataspace' }]);
+    redline.getDataspaces.and.rejectWith(new Error('Dataspaces unavailable'));
     redline.registerTenant.and.resolveTo({ id: 7, providerId: 1, name: 'Demo tenant' });
     TestBed.configureTestingModule({
       imports: [RegistrationComponent],
@@ -20,43 +20,63 @@ describe('RegistrationComponent', () => {
     });
   });
 
-  it('registers using only a tenant name and dataspace, with no provider selection', async () => {
+  async function create(): Promise<ComponentFixture<RegistrationComponent>> {
     const fixture = TestBed.createComponent(RegistrationComponent);
     fixture.autoDetectChanges();
     await fixture.whenStable();
+    return fixture;
+  }
+
+  function enterName(fixture: ComponentFixture<RegistrationComponent>, value: string): void {
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  }
+
+  it('registers with only a name, even when dataspaces are unavailable', async () => {
+    const fixture = await create();
     const element: HTMLElement = fixture.nativeElement;
     expect(element.querySelector('select')).toBeNull();
-    expect(redline.getDataspaces).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(redline.getDataspaces).not.toHaveBeenCalled();
 
-    const name = element.querySelector<HTMLInputElement>('input[formControlName="tenantName"]')!;
-    name.value = ' Demo tenant ';
-    name.dispatchEvent(new Event('input'));
-    element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    enterName(fixture, ' Demo tenant ');
     await fixture.whenStable();
-
     const submit = element.querySelector<HTMLButtonElement>('button[type="submit"]')!;
     expect(submit.disabled).toBeFalse();
     submit.click();
     await fixture.whenStable();
 
-    expect(redline.registerTenant).toHaveBeenCalledOnceWith({
-      tenantName: 'Demo tenant',
-      dataspaceInfos: [{ dataspaceId: 2 }],
-    });
+    expect(redline.registerTenant).toHaveBeenCalledOnceWith({ tenantName: 'Demo tenant' });
     expect(element.textContent).toContain('Registration for');
     expect(element.textContent).toContain('Demo tenant');
   });
 
-  it('still requires a dataspace selection', async () => {
-    const fixture = TestBed.createComponent(RegistrationComponent);
-    fixture.autoDetectChanges();
-    await fixture.whenStable();
+  it('rejects missing and whitespace-only names', async () => {
+    const fixture = await create();
     const element: HTMLElement = fixture.nativeElement;
-    const name = element.querySelector<HTMLInputElement>('input[formControlName="tenantName"]')!;
-    name.value = 'Demo tenant';
-    name.dispatchEvent(new Event('input'));
+    expect(element.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBeTrue();
+    enterName(fixture, '   ');
     await fixture.whenStable();
     expect(element.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBeTrue();
     expect(redline.registerTenant).not.toHaveBeenCalled();
+  });
+
+  it('shows submission failures and allows retry', async () => {
+    redline.registerTenant.and.rejectWith(new Error('Registration failed'));
+    const fixture = await create();
+    enterName(fixture, 'Demo tenant');
+    await fixture.whenStable();
+    const submit: HTMLButtonElement = fixture.nativeElement.querySelector('button[type="submit"]');
+    submit.click();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('Registration failed');
+    expect(submit.disabled).toBeFalse();
+
+    redline.registerTenant.and.resolveTo({ id: 7, providerId: 1, name: 'Demo tenant' });
+    submit.click();
+    await fixture.whenStable();
+    expect(redline.registerTenant).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('Registration for');
   });
 });

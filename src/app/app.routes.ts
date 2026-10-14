@@ -86,6 +86,14 @@ export const routes: Routes = [
           import('../participant-view/explore/explore.routes').then((m) => m.EXPLORE_ROUTES),
       },
       {
+        path: 'dataspaces',
+        title: 'Dataspaces',
+        loadComponent: () =>
+          import('../participant-view/dataspaces/dataspaces.component').then(
+            (m) => m.DataspacesComponent,
+          ),
+      },
+      {
         path: 'partners',
         loadChildren: () =>
           import('../participant-view/partners/partners.routes').then((m) => m.PARTNERS_ROUTES),

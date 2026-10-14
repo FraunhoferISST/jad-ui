@@ -78,9 +78,10 @@ describe('TenantViewComponent seeded provider', () => {
 
   it('registers a tenant without a provider argument and reloads tenants', fakeAsync(() => {
     component.openRegisterTenant();
-    const [form, , outputs] = modal.openModal.calls.mostRecent().args;
+    const [form, inputs, outputs] = modal.openModal.calls.mostRecent().args;
+    expect(inputs).toEqual({});
     expect(form).toBe(TenantFormComponent);
-    const registration = { tenantName: 'Demo', dataspaceInfos: [{ dataspaceId: 2 }] };
+    const registration = { tenantName: 'Demo' };
     (outputs as { save: (value: TenantRegistration) => void }).save(registration);
     flushMicrotasks();
     expect(redline.registerTenant).toHaveBeenCalledOnceWith(registration);
