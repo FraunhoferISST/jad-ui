@@ -29,6 +29,15 @@ spec:
           env:
             - name: KC_HTTP_ENABLED
               value: "true"
+            # Bound the dev JVM heap independently of host/container RAM and
+            # leave room for metaspace, native memory and startup augmentation.
+            - name: JAVA_OPTS_KC_HEAP
+              value: "-Xms128m -Xmx512m"
+          resources:
+            requests:
+              memory: 512Mi
+            limits:
+              memory: 1Gi
           readinessProbe:
             httpGet:
               path: /realms/master
