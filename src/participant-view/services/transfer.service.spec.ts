@@ -272,6 +272,25 @@ describe('TransferService history', () => {
     expect(history[0].partnerName).toBe('Consumer partner');
   });
 
+  for (const origin of ['owned', 'remote'] as const) {
+    it(`retains all agreed partners in ${origin} history, even outside the directory`, async () => {
+      file.origin = origin;
+      const otherAgreement = new ContractAgreement();
+      otherAgreement.id = 'other-contract';
+      otherAgreement.setValue('edc', 'providerId', 'former-provider');
+      otherAgreement.setValue('edc', 'consumerId', 'former-consumer');
+      file.agreements!.push(otherAgreement);
+      queryAll.and.resolveTo([
+        transfer('current', {}),
+        transfer('historical', { contractId: 'other-contract' }),
+        transfer('unrelated', { contractId: 'unrelated-contract' }),
+      ]);
+      const history = await service.getFileTransferHistory(file);
+      expect(history.map((item) => item.id)).toEqual(['current', 'historical']);
+      expect(history[1].partnerId).toBe(origin === 'owned' ? 'former-consumer' : 'former-provider');
+    });
+  }
+
   it('prefers creation time when available, also in milliseconds', async () => {
     const createdAt = 1791362190709;
     queryAll.and.resolveTo([transfer('created', { createdAt, stateTimestamp: 1791368970635 })]);

@@ -34,13 +34,21 @@
         <p class="text-xs uppercase tracking-wide text-base-content/60">File size</p>
         <p class="font-medium">{{ formatFileSize(file.size) }}</p>
       </div>
+      @if (file.origin === 'owned') {
+        <div class="rounded-xl border border-base-300 bg-base-200 p-3 sm:col-span-2">
+          <p class="text-xs uppercase tracking-wide text-base-content/60">Contract definition</p>
+          <p class="break-all font-medium">
+            {{ file.contractDefinitionId || 'No contract definition linked.' }}
+          </p>
+        </div>
+      }
     </div>
 
     <section class="rounded-xl bg-base-200 p-4">
       @if (file.origin === 'remote') {
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold">Shared by</h2>
-          <span class="badge badge-secondary" >
+          <span class="badge badge-secondary">
             {{ file.origin | titlecase }}
           </span>
         </div>
@@ -50,18 +58,27 @@
       } @else {
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold">Shared with</h2>
-          <span class="badge badge-primary" >
+          <span class="badge badge-primary">
             {{ file.origin | titlecase }}
           </span>
         </div>
-        @if (!file.accessRestrictions || file.accessRestrictions.length === 0) {
-          <p class="text-sm text-base-content/70">Not shared with any partners.</p>
+        @if (loadingSharing) {
+          <span
+            class="loading loading-spinner loading-sm"
+            role="status"
+            aria-label="Loading shared partners"
+          ></span>
         } @else {
-          <div class="flex flex-wrap gap-2">
-            @for (partner of file.accessRestrictions; track partner.partnerId) {
-              <span class="badge badge-outline">
-                {{ partner.partnerName || partner.partnerId || 'N/A' }}
-              </span>
+          <div aria-live="polite">
+            <p class="font-medium">
+              {{ contractSharing?.summary || 'Partner access unavailable' }}
+            </p>
+            @if (contractSharing && contractSharing.partners.length > 0) {
+              <ul class="mt-2 list-disc space-y-1 pl-5 text-sm" aria-label="Shared partners">
+                @for (partner of contractSharing.partners; track partner.identifier) {
+                  <li class="break-all">{{ partner.nickname || partner.identifier }}</li>
+                }
+              </ul>
             }
           </div>
         }
@@ -145,7 +162,9 @@
                 } @else {
                   @for (transaction of file.transactionHistory; track transaction.id) {
                     <tr>
-                      <td>{{ (transaction.timestamp | date: DATE_FORMATS.dateWithTime) ?? 'N/A' }}</td>
+                      <td>
+                        {{ (transaction.timestamp | date: DATE_FORMATS.dateWithTime) ?? 'N/A' }}
+                      </td>
                       <td>{{ transaction.partnerName || transaction.partnerId || 'N/A' }}</td>
                       <td>{{ transaction.type | titlecase }}</td>
                       <td>

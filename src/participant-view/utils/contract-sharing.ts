@@ -1,4 +1,4 @@
-import { PartnerReference } from '../../models/redline-data.model';
+import { PartnerReference } from '../models/redline-data.model';
 
 export interface ContractSharing {
   summary: string;

@@ -9,7 +9,6 @@ import { canAccess } from '../auth/access-rules';
 import { UserMenuComponent } from './user-menu.component';
 import { REDLINE_CONFIG } from '../../operator-view/redline.config';
 import { RedlineService } from '../../operator-view/services/redline.service';
-import { CelExpressionsController } from '../../participant-view/edc-controllers/cel-expression.controller';
 import { V5ContractAgreementController } from '../../participant-view/edc-controllers/contract-agreements-v5.controller';
 import { PolicyCreationController } from '../../participant-view/edc-controllers/policy-creation.controller';
 
@@ -152,7 +151,6 @@ export class ShellComponent implements OnInit {
     }
 
     config.customControllers = {
-      'celExpressions': CelExpressionsController,
       'v5contractAgreements': V5ContractAgreementController,
       'policyCreation': PolicyCreationController
     }

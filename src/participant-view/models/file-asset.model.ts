@@ -9,20 +9,13 @@ export interface FileAsset {
   updatedAt?: string | number;
   size?: number;
   type?: string;
-  accessRestrictions?: AccessRestriction[];
   agreements?: ContractAgreement[];
   transactionHistory?: Transaction[];
   partnerName?: string;
   catalogDataset?: Dataset;
   partnerDid?: string;
   assetId?: string;
-}
-
-export interface AccessRestriction {
-  partnerId?: string;
-  partnerName?: string;
-  policy?: string;
-  contractId?: string;
+  contractDefinitionId?: string;
 }
 
 export interface Transaction {

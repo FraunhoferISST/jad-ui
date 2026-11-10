@@ -65,7 +65,6 @@ export class TransferService {
       return [];
     }
 
-    const partnerIds = this.partnerIdsFromMetadata(file);
     const partners = await this.partnerService.getPartners();
     const partnerNames = new Map(
       partners
@@ -79,14 +78,6 @@ export class TransferService {
     const history: Transaction[] = [];
 
     for (const agreement of file.agreements) {
-      if (partnerIds.length > 0) {
-        const agreementPartnerId =
-          file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
-        if (!partnerIds.includes(agreementPartnerId)) {
-          continue;
-        }
-      }
-
       const related = transfers.filter((transfer) => transfer.contractId === agreement.id);
       const partnerId = file.origin === 'owned' ? agreement.consumerId : agreement.providerId;
       const partnerName = partnerNames.get(partnerId);
@@ -209,12 +200,6 @@ export class TransferService {
       // Give the browser time to consume the object URL before releasing it.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
-  }
-
-  private partnerIdsFromMetadata(file: FileAsset): string[] {
-    return (file.accessRestrictions ?? [])
-      .map((restriction) => restriction.partnerId)
-      .filter((partnerId): partnerId is string => !!partnerId);
   }
 
   private async waitForTransferStarted(transferProcessId: string): Promise<TransferProcess> {

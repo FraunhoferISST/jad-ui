@@ -1,12 +1,14 @@
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { Component, inject, Input, OnInit } from '@angular/core';
-import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
+import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
+import { ContractSharingService } from '../../services/contract-sharing.service';
 import { FileSharingApiService } from '../../services/file-sharing-api.service';
 import { TransferService } from '../../services/transfer.service';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
+import { ContractSharing } from '../../utils/contract-sharing';
 
 @Component({
   selector: 'participant-file-detail',
@@ -19,12 +21,16 @@ export class FileDetailComponent implements OnInit {
   private readonly transferService = inject(TransferService);
   private readonly catalogService = inject(CatalogService);
   private readonly fileSharing = inject(FileSharingApiService);
+  private readonly edcClientService = inject(EdcClientService);
+  private readonly sharingService = inject(ContractSharingService);
 
   @Input({ required: true }) file!: FileAsset;
 
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
 
+  contractSharing?: ContractSharing;
+  loadingSharing = true;
   loadingAgreements = true;
   loadingTransferHistory = true;
   requestingTransfer = false;
@@ -61,19 +67,35 @@ export class FileDetailComponent implements OnInit {
       return file.partnerName || file.partnerDid || 'N/A';
     }
     const partnerId = agreement.consumerId;
-    const restriction = (file.accessRestrictions ?? []).find(
-      (item) => item.partnerId === partnerId,
-    );
-    return restriction?.partnerName || partnerId || 'N/A';
+    const partner = this.contractSharing?.partners.find((item) => item.identifier === partnerId);
+    return partner?.nickname || partnerId || 'N/A';
   }
 
   agreementDate(epochSeconds: number): number {
     return epochSeconds * 1000;
   }
 
-  async ngOnInit() {
+  async ngOnInit(): Promise<void> {
+    const sharing = this.loadSharing();
     await this.loadAgreements();
-    await this.loadTransferHistory();
+    await Promise.all([this.loadTransferHistory(), sharing]);
+  }
+
+  private async loadSharing(): Promise<void> {
+    try {
+      if (this.file.origin !== 'owned' || !this.file.contractDefinitionId) return;
+      const client = await this.edcClientService.getClient();
+      const definition = await client.management.contractDefinitions.get(
+        this.file.contractDefinitionId,
+      );
+      const sharing = await this.sharingService.getSharing([definition]);
+      this.contractSharing = sharing.get(definition.id);
+    } catch {
+      // Keep the remaining file details usable if its definition cannot be loaded.
+      this.contractSharing = undefined;
+    } finally {
+      this.loadingSharing = false;
+    }
   }
 
   private async loadAgreements(): Promise<void> {

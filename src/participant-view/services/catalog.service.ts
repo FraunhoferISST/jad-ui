@@ -64,14 +64,7 @@ export class CatalogService {
   }
 
   async matchContractsToFiles(files: FileAsset[]): Promise<FileAsset[]> {
-    const [agreements, partners] = await Promise.all([
-      this.listAgreements(),
-      this.partners.getPartners(),
-    ]);
-
-    const partnerNames = new Map(
-      partners.filter(item => !!item.identifier).map(item => [item.identifier, item.nickname ?? 'N/A']),
-    );
+    const agreements = await this.listAgreements();
 
     for (const agreement of agreements) {
       if (!agreement.assetId) {
@@ -91,24 +84,7 @@ export class CatalogService {
   }
 
   async getAgreementsForFile(file: FileAsset): Promise<ContractAgreement[]> {
-    const agreements = await this.listAgreements(file.assetId);
-    const partnerIds = this.partnerIdsFromMetadata(file);
-
-    if (partnerIds.length === 0) {
-      return agreements;
-    }
-
-    return agreements.filter(agreement =>
-      file.origin === 'owned'
-        ? partnerIds.includes(agreement.consumerId)
-        : partnerIds.includes(agreement.providerId),
-    );
-  }
-
-  private partnerIdsFromMetadata(file: FileAsset): string[] {
-    return (file.accessRestrictions ?? [])
-      .map(restriction => restriction.partnerId)
-      .filter((partnerId): partnerId is string => !!partnerId);
+    return file.assetId ? this.listAgreements(file.assetId) : [];
   }
 
   private async listAgreements(assetId?: string): Promise<ContractAgreement[]> {

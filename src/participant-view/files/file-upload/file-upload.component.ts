@@ -4,11 +4,11 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 import { ContractDefinition } from '@think-it-labs/edc-connector-client';
 
-import { PartnerService } from '../../services/partner.service';
+import { ContractSharingService } from '../../services/contract-sharing.service';
 import { ParticipantConfigService } from '../../services/participant-config.service';
 import { UploadService } from '../../services/upload.service';
 import { formatFileSize } from '../../utils/format.utils';
-import { ContractSharing, getContractSharing } from './contract-sharing';
+import { ContractSharing } from '../../utils/contract-sharing';
 
 @Component({
   selector: 'participant-file-upload',
@@ -23,7 +23,7 @@ export class FileUploadComponent {
   private readonly edcClientService = inject(EdcClientService);
   private readonly uploadService = inject(UploadService);
   private readonly configService = inject(ParticipantConfigService);
-  private readonly partnerService = inject(PartnerService);
+  private readonly sharingService = inject(ContractSharingService);
 
   @Output() cancel = new EventEmitter<void>();
   @Output() uploaded = new EventEmitter<number>();
@@ -181,41 +181,11 @@ export class FileUploadComponent {
     this.loading = true;
     try {
       const client = await this.edcClientService.getClient();
-      const [definitions, uploadConfig, partners] = await Promise.all([
+      const [definitions, uploadConfig] = await Promise.all([
         client.management.contractDefinitions.queryAll(),
         this.configService.getUploadConfig(),
-        this.partnerService.getPartners(),
       ]);
-      const policyIds = [
-        ...new Set(
-          definitions.flatMap((definition) => [
-            definition.accessPolicyId,
-            definition.contractPolicyId,
-          ]),
-        ),
-      ];
-      const policies = new Map(
-        await Promise.all(
-          policyIds.map(async (id) => {
-            try {
-              return [id, (await client.management.policyDefinitions.get(id)).policy] as const;
-            } catch {
-              // A preview failure must not prevent selecting an existing definition.
-              return [id, undefined] as const;
-            }
-          }),
-        ),
-      );
-      this.contractSharing = new Map(
-        definitions.map((definition) => [
-          definition.id,
-          getContractSharing(
-            policies.get(definition.accessPolicyId),
-            policies.get(definition.contractPolicyId),
-            partners,
-          ),
-        ]),
-      );
+      this.contractSharing = await this.sharingService.getSharing(definitions);
       this.contractDefinitions = definitions.sort((a, b) => a.id.localeCompare(b.id));
       this.maxFileSize = uploadConfig.maxFileSize;
       this.allowedFileTypes = uploadConfig.allowedFileTypes;
