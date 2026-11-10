@@ -1,10 +1,11 @@
 <form
   [formGroup]="form"
   (ngSubmit)="uploadStep < 3 ? nextStep() : upload()"
-  class="grid grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0">
+  class="grid w-4xl max-w-full grid-cols-1 gap-4 items-start overflow-y-auto h-full [&_label]:shrink-0"
+>
   <h1 class="text-xl text-center divider m-0">Upload file</h1>
 
-  <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
+  <fieldset class="fieldset min-w-0 w-full bg-base-200 border border-base-300 p-4 rounded-box">
     <legend class="fieldset-legend text-sm">Workflow</legend>
     <ul class="steps steps-vertical lg:steps-horizontal w-full">
       @for (step of uploadSteps; track step.number) {
@@ -12,19 +13,20 @@
       }
     </ul>
     <p class="fieldset-label">
-      Upload stores file content, creates an EDC asset, and adds it to the selected contract definition.
+      Upload stores file content, creates an EDC asset, and adds it to the selected contract
+      definition.
     </p>
   </fieldset>
 
   @if (loading) {
-    <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-8 rounded-box">
+    <fieldset class="fieldset min-w-0 w-full bg-base-200 border border-base-300 p-8 rounded-box">
       <div class="flex items-center justify-center py-8">
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     </fieldset>
   } @else {
     @if (uploadStep === 1) {
-      <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
+      <fieldset class="fieldset min-w-0 w-full bg-base-200 border border-base-300 p-4 rounded-box">
         <legend class="fieldset-legend text-sm">Select files</legend>
         <input class="file-input w-full" type="file" multiple (change)="onFileSelected($event)" />
         <p class="fieldset-label">Max size per file: {{ formatFileSize(maxFileSize) }}</p>
@@ -36,7 +38,9 @@
                 <span class="material-symbols-rounded opacity-70">description</span>
                 <div class="list-col-grow min-w-0">
                   <div class="break-all whitespace-normal">{{ file.name }}</div>
-                  <div class="break-all whitespace-normal text-xs text-base-content/70">{{ file.type || 'unknown type' }}</div>
+                  <div class="break-all whitespace-normal text-xs text-base-content/70">
+                    {{ file.type || 'unknown type' }}
+                  </div>
                 </div>
                 <span class="badge badge-ghost">{{ formatFileSize(file.size) }}</span>
               </li>
@@ -47,30 +51,70 @@
     }
 
     @if (uploadStep === 2) {
-      <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
+      <fieldset class="fieldset min-w-0 w-full bg-base-200 border border-base-300 p-4 rounded-box">
         <legend class="fieldset-legend text-sm">Contract definition</legend>
 
-        <label for="upload-contract-definition" class="label">Existing contract definition</label>
-        <select id="upload-contract-definition" class="select w-full" formControlName="contractDefinitionId" required>
-          <option value="" disabled>Select a contract definition</option>
-          @for (definition of contractDefinitions; track definition.id) {
-            <option [value]="definition.id">{{ definition.id }}</option>
-          }
-        </select>
+        <p class="text-sm text-base-content/70">
+          Choose who these files can be shared with. Partners must satisfy both the access and
+          contract policies. Uploading does not send files automatically.
+        </p>
         @if (contractDefinitions.length === 0) {
-          <div role="alert" class="alert alert-info mt-3">Ask a tenant admin to create a contract definition before uploading.</div>
-        }
-        @if (getSelectedDefinition(); as definition) {
-          <div class="mt-3 rounded-box border border-base-300 bg-base-100 p-3 text-sm break-all">
-            <p>Access policy: {{ definition.accessPolicyId }}</p>
-            <p>Contract policy: {{ definition.contractPolicyId }}</p>
+          <div role="alert" class="alert alert-info mt-3">
+            Ask a tenant admin to create a contract definition before uploading.
+          </div>
+        } @else {
+          <div
+            class="grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+          >
+            <ul
+              id="upload-contract-list"
+              aria-label="Contracts"
+              class="list min-w-0 max-h-96 overflow-y-auto rounded-box border border-base-300 bg-base-100"
+            >
+              @for (definition of contractDefinitions; track definition.id; let index = $index) {
+                <li
+                  class="list-row p-0"
+                  [class.bg-base-200]="form.controls.contractDefinitionId.value === definition.id"
+                >
+                  <label class="col-span-full flex min-w-0 cursor-pointer items-center gap-3 p-3">
+                    <input
+                      [id]="'upload-contract-definition-' + index"
+                      type="radio"
+                      name="contractDefinitionId"
+                      class="radio radio-sm shrink-0"
+                      formControlName="contractDefinitionId"
+                      [value]="definition.id"
+                      aria-controls="upload-contract-sharing"
+                      required
+                    />
+                    <span class="min-w-0 text-sm font-medium break-all">{{ definition.id }}</span>
+                  </label>
+                </li>
+              }
+            </ul>
+            <section
+              id="upload-contract-sharing"
+              aria-label="Shared partners"
+              class="min-w-0 rounded-box border border-base-300 bg-base-100 p-3"
+            >
+              <div class="max-h-96 overflow-y-auto text-sm" aria-live="polite" aria-atomic="true">
+                @if (getSelectedDefinition(); as definition) {
+                  <ng-container
+                    [ngTemplateOutlet]="sharingPreview"
+                    [ngTemplateOutletContext]="{ $implicit: contractSharing.get(definition.id) }"
+                  />
+                } @else {
+                  <p class="text-base-content/70">Select a contract to view its shared partners.</p>
+                }
+              </div>
+            </section>
           </div>
         }
       </fieldset>
     }
 
     @if (uploadStep === 3) {
-      <fieldset class="fieldset w-lg bg-base-200 border border-base-300 p-4 rounded-box">
+      <fieldset class="fieldset min-w-0 w-full bg-base-200 border border-base-300 p-4 rounded-box">
         <legend class="fieldset-legend text-sm">Review</legend>
         <ul class="list rounded-box border border-base-300 bg-base-100">
           @for (preview of filePreviewData; track preview.name) {
@@ -86,6 +130,15 @@
           }
         </ul>
         @if (getSelectedDefinition(); as definition) {
+          <div
+            class="mt-3 rounded-box border border-base-300 bg-base-100 p-3 text-sm"
+            aria-live="polite"
+          >
+            <ng-container
+              [ngTemplateOutlet]="sharingPreview"
+              [ngTemplateOutletContext]="{ $implicit: contractSharing.get(definition.id) }"
+            />
+          </div>
           <p class="mt-3 text-sm break-all">Contract definition: {{ definition.id }}</p>
           <p class="text-sm break-all">Access policy: {{ definition.accessPolicyId }}</p>
           <p class="text-sm break-all">Contract policy: {{ definition.contractPolicyId }}</p>
@@ -94,14 +147,15 @@
     }
   }
 
-  <div class="flex flex-col items-center w-lg">
+  <div class="flex flex-col items-center min-w-0 w-full">
     <div class="divider mt-0"></div>
     <div class="flex w-full flex-wrap gap-2">
       <button
         class="btn"
         type="button"
         [disabled]="uploadStep === 1 || loading"
-        (click)="previousStep()">
+        (click)="previousStep()"
+      >
         Previous
       </button>
 
@@ -126,3 +180,16 @@
     </div>
   </div>
 </form>
+
+<ng-template #sharingPreview let-sharing>
+  @if (sharing) {
+    <p class="font-medium">{{ sharing.summary }}</p>
+    @if (sharing.partners.length > 0) {
+      <ul class="mt-2 list-disc space-y-1 pl-5">
+        @for (partner of sharing.partners; track partner.identifier) {
+          <li class="break-all">{{ partner.nickname || partner.identifier }}</li>
+        }
+      </ul>
+    }
+  }
+</ng-template>

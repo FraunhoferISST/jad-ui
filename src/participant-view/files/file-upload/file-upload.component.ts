@@ -4,15 +4,18 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 import { ContractDefinition } from '@think-it-labs/edc-connector-client';
 
+import { PartnerService } from '../../services/partner.service';
 import { ParticipantConfigService } from '../../services/participant-config.service';
 import { UploadService } from '../../services/upload.service';
 import { formatFileSize } from '../../utils/format.utils';
+import { ContractSharing, getContractSharing } from './contract-sharing';
 
 @Component({
   selector: 'participant-file-upload',
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './file-upload.component.html',
+  host: { class: 'block min-w-0 max-w-full' },
 })
 export class FileUploadComponent {
   private readonly fb = inject(FormBuilder);
@@ -20,6 +23,7 @@ export class FileUploadComponent {
   private readonly edcClientService = inject(EdcClientService);
   private readonly uploadService = inject(UploadService);
   private readonly configService = inject(ParticipantConfigService);
+  private readonly partnerService = inject(PartnerService);
 
   @Output() cancel = new EventEmitter<void>();
   @Output() uploaded = new EventEmitter<number>();
@@ -32,6 +36,7 @@ export class FileUploadComponent {
   uploadStep = 1;
   selectedFiles: File[] = [];
   contractDefinitions: ContractDefinition[] = [];
+  contractSharing = new Map<string, ContractSharing>();
   filePreviewData: Array<{
     name: string;
     size: number;
@@ -60,7 +65,7 @@ export class FileUploadComponent {
     }
 
     const files = Array.from(input.files);
-    const tooLarge = files.find(file => file.size > this.maxFileSize);
+    const tooLarge = files.find((file) => file.size > this.maxFileSize);
     if (tooLarge) {
       this.modalAndAlert.showAlert(
         `File "${tooLarge.name}" exceeds max size ${formatFileSize(this.maxFileSize)}.`,
@@ -72,7 +77,7 @@ export class FileUploadComponent {
     }
 
     if (this.allowedFileTypes.length > 0) {
-      const invalid = files.find(file => !this.allowedFileTypes.includes(file.type));
+      const invalid = files.find((file) => !this.allowedFileTypes.includes(file.type));
       if (invalid) {
         this.modalAndAlert.showAlert(
           `File "${invalid.name}" has unsupported type ${invalid.type || 'unknown'}.`,
@@ -160,12 +165,12 @@ export class FileUploadComponent {
 
   getSelectedDefinition(): ContractDefinition | undefined {
     return this.contractDefinitions.find(
-      definition => definition.id === this.form.controls.contractDefinitionId.value,
+      (definition) => definition.id === this.form.controls.contractDefinitionId.value,
     );
   }
 
   private preparePreview(): void {
-    this.filePreviewData = this.selectedFiles.map(file => ({
+    this.filePreviewData = this.selectedFiles.map((file) => ({
       name: file.name,
       size: file.size,
       type: file.type || 'application/octet-stream',
@@ -175,11 +180,42 @@ export class FileUploadComponent {
   private async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [definitions, uploadConfig] = await Promise.all([
-        this.edcClientService.getClient().then(client => client.management.contractDefinitions.queryAll()),
+      const client = await this.edcClientService.getClient();
+      const [definitions, uploadConfig, partners] = await Promise.all([
+        client.management.contractDefinitions.queryAll(),
         this.configService.getUploadConfig(),
+        this.partnerService.getPartners(),
       ]);
-
+      const policyIds = [
+        ...new Set(
+          definitions.flatMap((definition) => [
+            definition.accessPolicyId,
+            definition.contractPolicyId,
+          ]),
+        ),
+      ];
+      const policies = new Map(
+        await Promise.all(
+          policyIds.map(async (id) => {
+            try {
+              return [id, (await client.management.policyDefinitions.get(id)).policy] as const;
+            } catch {
+              // A preview failure must not prevent selecting an existing definition.
+              return [id, undefined] as const;
+            }
+          }),
+        ),
+      );
+      this.contractSharing = new Map(
+        definitions.map((definition) => [
+          definition.id,
+          getContractSharing(
+            policies.get(definition.accessPolicyId),
+            policies.get(definition.contractPolicyId),
+            partners,
+          ),
+        ]),
+      );
       this.contractDefinitions = definitions.sort((a, b) => a.id.localeCompare(b.id));
       this.maxFileSize = uploadConfig.maxFileSize;
       this.allowedFileTypes = uploadConfig.allowedFileTypes;
