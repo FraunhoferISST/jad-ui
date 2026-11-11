@@ -9,12 +9,6 @@ describe('canAccess', () => {
     expect(canAccess('some-unknown-path', null)).toBe(false);
   });
 
-  it('allows role-agnostic paths (logout) for any authenticated role', () => {
-    expect(canAccess('logout', 'operator')).toBe(true);
-    expect(canAccess('logout', 'tenant-admin')).toBe(true);
-    expect(canAccess('logout', 'tenant-user')).toBe(true);
-  });
-
   it('allows unknown paths for any authenticated role (fail-open by design)', () => {
     expect(canAccess('newly-added-route', 'operator')).toBe(true);
     expect(canAccess('newly-added-route', 'tenant-admin')).toBe(true);

@@ -1,8 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { DataspaceInfo, Tenant } from '../../operator-view/models/redline.models';
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { DataspaceInfo, Tenant } from '../../app/redline/redline.models';
+import { RedlineService } from '../../app/redline/redline.service';
 import { ParticipantContextService } from '../services/participant-context.service';
 import { DataspacesComponent } from './dataspaces.component';
 

@@ -7,14 +7,13 @@
  * at least one active participant and none that are only partially deployed.
  */
 
-import { Participant, Tenant } from '../models/redline.models';
+import { Participant, Tenant } from '../../app/redline/redline.models';
 
 /** Whether a participant has agents and every one of them is `ACTIVE`. */
 export function isParticipantActive(participant: Participant): boolean {
   const agents = participant.agents ?? [];
   return (
-    agents.length > 0 &&
-    agents.every(agent => (agent.state ?? '').toUpperCase() === 'ACTIVE')
+    agents.length > 0 && agents.every((agent) => (agent.state ?? '').toUpperCase() === 'ACTIVE')
   );
 }
 
@@ -24,9 +23,6 @@ export function isParticipantActive(participant: Participant): boolean {
  */
 export function isTenantDeployed(tenant: Tenant): boolean {
   const participantsWithAgents =
-    tenant.participants?.filter(p => (p.agents?.length ?? 0) > 0) ?? [];
-  return (
-    participantsWithAgents.length > 0 &&
-    participantsWithAgents.every(isParticipantActive)
-  );
+    tenant.participants?.filter((p) => (p.agents?.length ?? 0) > 0) ?? [];
+  return participantsWithAgents.length > 0 && participantsWithAgents.every(isParticipantActive);
 }

@@ -3,71 +3,120 @@
     <div class="card-body gap-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 class="card-title">Partner management</h2>
+          <h1 class="card-title">Partner management</h1>
           <p class="text-sm text-base-content/70">
-            Add partner references from registered Redline participants. Remove is currently unavailable.
+            Partner references belong to a dataspace membership. Add registered participants or
+            arbitrary identifiers to one of your joined dataspaces. Removing is currently
+            unavailable.
           </p>
         </div>
-        <button class="btn" type="button" [disabled]="loading" (click)="refresh()">
-          @if (loading) {
-            <span class="loading loading-spinner loading-xs"></span>
+        <button
+          class="btn"
+          type="button"
+          aria-label="Refresh partners"
+          [disabled]="loading() || addingPartners()"
+          (click)="loadData()"
+        >
+          @if (loading()) {
+            <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
             Refreshing
           } @else {
-            <span class="material-symbols-rounded">refresh</span>
+            <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
             Refresh
           }
         </button>
       </div>
 
+      @if (!loading() && groups().length === 0) {
+        <div role="status" class="alert alert-info">
+          <span class="material-symbols-rounded" aria-hidden="true">hub</span>
+          <span>
+            You have not joined a dataspace yet, so there is no place to store partner references.
+            <a class="link" routerLink="/dataspaces">Join a dataspace</a> first.
+          </span>
+        </div>
+      }
+
       <div class="card bg-base-100 border border-base-300">
         <div class="card-body gap-3">
-          <h3 class="card-title text-base">Add partners</h3>
+          <h2 class="card-title text-base">Add partners</h2>
           <p class="text-sm text-base-content/70">
-            Select one or more participants and add them as partner references.
+            Select one or more participants and add them as partner references to
+            <strong>{{ targetDataspace()?.dataspace?.name ?? 'a dataspace' }}</strong
+            >.
           </p>
 
+          <fieldset class="fieldset" [disabled]="addingPartners() || !targetDataspace()">
+            <legend class="fieldset-legend">Dataspace</legend>
+            <select
+              class="select w-full"
+              aria-label="Dataspace to add partners to"
+              [value]="targetDataspace()?.dataspace?.id ?? ''"
+              (change)="selectTargetDataspace(+$any($event.target).value)"
+            >
+              @for (group of groups(); track group.dataspace.id) {
+                <option [value]="group.dataspace.id">
+                  {{ group.dataspace.name }} — {{ group.partners.length }} partner(s)
+                </option>
+              }
+            </select>
+          </fieldset>
+
           <label class="input w-full">
-            <span class="material-symbols-rounded opacity-70">search</span>
+            <span class="material-symbols-rounded opacity-70" aria-hidden="true">search</span>
             <input
+              #participantSearchInput
               type="text"
-              [value]="participantSearch"
-              (input)="filterParticipants($any($event.target).value)"
-              placeholder="Search participants by tenant or identifier" />
+              aria-label="Search participants by tenant or identifier"
+              [value]="participantSearch()"
+              (input)="participantSearch.set(participantSearchInput.value)"
+              placeholder="Search participants by tenant or identifier"
+            />
           </label>
 
           <div class="max-h-72 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
-            @if (loading) {
-              <div class="flex items-center justify-center py-8">
-                <span class="loading loading-bars loading-lg text-primary"></span>
+            @if (loading()) {
+              <div role="status" class="flex items-center justify-center py-8">
+                <span
+                  class="loading loading-bars loading-lg text-primary"
+                  aria-hidden="true"
+                ></span>
+                <span class="sr-only">Loading participants…</span>
               </div>
+            } @else if (filteredParticipants().length === 0) {
+              <p class="px-2 py-3 text-sm text-base-content/70">
+                No available participants to add to this dataspace.
+              </p>
             } @else {
-              @if (getFilteredParticipants().length > 0) {
-                @for (option of getFilteredParticipants(); track option.participantIdentifier) {
-                  <button
-                    class="btn btn-ghost mb-1 h-auto min-h-0 w-full justify-start py-2"
-                    type="button"
-                    (click)="toggleParticipantSelection(option.participantIdentifier)">
-                    <input
-                      class="checkbox checkbox-sm"
-                      type="checkbox"
-                      [checked]="isParticipantSelected(option.participantIdentifier)" />
-                    <span class="text-left">
-                      <span class="block text-sm">{{ option.participantIdentifier }}</span>
-                      <span class="block text-xs text-base-content/70">{{ option.tenantName }}</span>
-                    </span>
-                  </button>
-                }
-              } @else {
-                <p class="px-2 py-3 text-sm text-base-content/70">No available participants to add.</p>
+              @for (option of filteredParticipants(); track option.participantIdentifier) {
+                <button
+                  class="btn btn-ghost mb-1 h-auto min-h-0 w-full justify-start py-2"
+                  type="button"
+                  [disabled]="addingPartners()"
+                  [attr.aria-pressed]="selectedParticipants().has(option.participantIdentifier)"
+                  (click)="toggleParticipantSelection(option.participantIdentifier)"
+                >
+                  <input
+                    class="checkbox checkbox-sm pointer-events-none"
+                    type="checkbox"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    [checked]="selectedParticipants().has(option.participantIdentifier)"
+                  />
+                  <span class="text-left">
+                    <span class="block text-sm break-all">{{ option.participantIdentifier }}</span>
+                    <span class="block text-xs text-base-content/70">{{ option.tenantName }}</span>
+                  </span>
+                </button>
               }
             }
           </div>
 
           <div class="rounded-box border border-base-300 bg-base-200 p-3">
-            @if (getSelectedParticipantLabels().length > 0) {
+            @if (selectedParticipantLabels().length !== 0) {
               <p class="mb-2 text-sm font-medium">Selected</p>
               <div class="flex flex-wrap gap-2">
-                @for (label of getSelectedParticipantLabels(); track label) {
+                @for (label of selectedParticipantLabels(); track $index) {
                   <span class="badge badge-soft">{{ label }}</span>
                 }
               </div>
@@ -77,73 +126,229 @@
           </div>
 
           <div class="card-actions justify-end gap-2">
-            <button class="btn btn-ghost" type="button" [disabled]="addingPartners" (click)="clearSelection()">
+            <button
+              class="btn btn-ghost"
+              type="button"
+              [disabled]="addingPartners()"
+              (click)="clearSelection()"
+            >
               Clear
             </button>
             <button
               class="btn btn-primary"
               type="button"
-              [disabled]="addingPartners || getSelectedParticipantIds().length === 0"
-              (click)="addSelectedPartners()">
-              @if (addingPartners) {
-                <span class="loading loading-spinner loading-xs"></span>
+              [disabled]="
+                addingPartners() || selectedParticipants().size === 0 || !targetDataspace()
+              "
+              (click)="addSelectedPartners()"
+            >
+              @if (addingPartners()) {
+                <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
                 Adding
               } @else {
-                <span class="material-symbols-rounded">person_add</span>
+                <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
                 Add selected
               }
             </button>
           </div>
+
+          @if (targetDataspace(); as target) {
+            @if (message(target.dataspace.id); as message) {
+              <div
+                role="status"
+                class="alert"
+                [class.alert-success]="message.kind === 'success'"
+                [class.alert-warning]="message.kind === 'warning'"
+                [class.alert-error]="message.kind === 'error'"
+              >
+                <span>{{ message.text }}</span>
+              </div>
+            }
+          }
         </div>
       </div>
+
+      @if (targetDataspace(); as target) {
+        <div class="card bg-base-100 border border-base-300">
+          <div class="card-body gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="card-title text-base">Add unregistered partner</h2>
+              <button
+                class="btn btn-sm btn-ghost"
+                type="button"
+                [attr.aria-expanded]="form(target.dataspace.id).create"
+                (click)="toggleManualCreate(target.dataspace.id)"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">
+                  {{ form(target.dataspace.id).create ? 'expand_less' : 'expand_more' }}
+                </span>
+                {{ form(target.dataspace.id).create ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+            <p class="text-sm text-base-content/70">
+              Partner references are local metadata: Redline stores any identifier. Use this form
+              for counterparties that are not registered under this service provider.
+            </p>
+
+            @if (form(target.dataspace.id).create) {
+              <fieldset class="fieldset" [disabled]="addingPartners()">
+                <label class="label" for="partner-identifier">Partner identifier (DID)</label>
+                <input
+                  id="partner-identifier"
+                  class="input w-full"
+                  type="text"
+                  [value]="form(target.dataspace.id).identifier"
+                  (input)="
+                    updateForm(target.dataspace.id, { identifier: $any($event.target).value })
+                  "
+                  placeholder="did:web:partner.example:participant-1"
+                />
+                <label class="label" for="partner-nickname">Display name (optional)</label>
+                <input
+                  id="partner-nickname"
+                  class="input w-full"
+                  type="text"
+                  [value]="form(target.dataspace.id).nickname"
+                  (input)="updateForm(target.dataspace.id, { nickname: $any($event.target).value })"
+                  placeholder="Partner Ltd"
+                />
+                <label class="label" for="partner-properties">Properties (JSON object)</label>
+                <textarea
+                  id="partner-properties"
+                  class="textarea w-full font-mono"
+                  rows="3"
+                  [value]="form(target.dataspace.id).properties"
+                  (input)="
+                    updateForm(target.dataspace.id, { properties: $any($event.target).value })
+                  "
+                ></textarea>
+                <p class="text-sm text-base-content/70">Leave empty to store no properties.</p>
+                <div class="card-actions justify-end gap-2">
+                  <button
+                    class="btn btn-ghost"
+                    type="button"
+                    [disabled]="addingPartners()"
+                    (click)="toggleManualCreate(target.dataspace.id)"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    [disabled]="addingPartners()"
+                    (click)="addPartnerManually(target.dataspace.id)"
+                  >
+                    @if (addingPartners()) {
+                      <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+                    } @else {
+                      <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
+                    }
+                    Add partner
+                  </button>
+                </div>
+              </fieldset>
+            }
+          </div>
+        </div>
+      }
     </div>
   </div>
 
   <div class="card bg-base-200 border border-base-300 shadow-xl">
     <div class="card-body gap-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h3 class="card-title">Current partners</h3>
+        <h2 class="card-title">Partners by dataspace</h2>
         <label class="input w-full max-w-xs">
-          <span class="material-symbols-rounded opacity-70">search</span>
+          <span class="material-symbols-rounded opacity-70" aria-hidden="true">search</span>
           <input
+            #partnerSearchInput
             type="text"
-            [value]="partnerSearch"
-            (input)="filterPartners($any($event.target).value)"
-            placeholder="Filter partners" />
+            aria-label="Filter partners"
+            [value]="partnerSearch()"
+            (input)="partnerSearch.set(partnerSearchInput.value)"
+            placeholder="Filter partners"
+          />
         </label>
       </div>
 
-      @if (loading) {
-        <div class="flex items-center justify-center py-8">
-          <span class="loading loading-bars loading-lg text-primary"></span>
+      @if (loading()) {
+        <div role="status" class="flex items-center justify-center py-8">
+          <span class="loading loading-bars loading-lg text-primary" aria-hidden="true"></span>
+          <span class="sr-only">Loading partners…</span>
         </div>
-      } @else if (filteredPartners.length === 0) {
+      } @else if (groups().length === 0) {
         <div class="rounded-box border border-base-300 bg-base-100 p-8 text-center">
-          <span class="material-symbols-rounded text-3xl opacity-60">groups</span>
-          <p class="mt-2 font-medium">No partners found</p>
-          <p class="text-sm text-base-content/70">Try another filter or add partners above.</p>
+          <span class="material-symbols-rounded text-3xl opacity-60" aria-hidden="true"
+            >groups</span
+          >
+          <p class="mt-2 font-medium">No joined dataspaces</p>
+          <p class="text-sm text-base-content/70">
+            Partner references are stored per dataspace membership.
+          </p>
+        </div>
+      } @else if (filteredGroups().length === 0) {
+        <div class="rounded-box border border-base-300 bg-base-100 p-8 text-center">
+          <span class="material-symbols-rounded text-3xl opacity-60" aria-hidden="true"
+            >groups</span
+          >
+          <p class="mt-2 font-medium">No partners match the filter</p>
         </div>
       } @else {
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          @for (partner of filteredPartners; track partner.identifier) {
-            <div class="card bg-base-100 border border-base-300">
+        <div class="flex flex-col gap-4">
+          @for (group of filteredGroups(); track group.dataspace.id) {
+            <section
+              class="card bg-base-100 border border-base-300"
+              [attr.aria-label]="group.dataspace.name + ' partners'"
+            >
               <div class="card-body gap-3">
-                <h4 class="card-title text-base">{{ partner.nickname || partner.identifier }}</h4>
-                <div class="text-xs text-base-content/70 break-all">{{ partner.identifier }}</div>
-                <div class="card-actions justify-end">
-                  <button class="btn btn-sm" type="button" (click)="showRemoveUnsupported()">
-                    <span class="material-symbols-rounded">person_remove</span>
-                    Remove
-                  </button>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 class="card-title text-base">{{ group.dataspace.name }}</h3>
+                    <p class="text-xs text-base-content/70">Dataspace #{{ group.dataspace.id }}</p>
+                  </div>
+                  <span class="badge badge-soft">{{ group.partners.length }} partner(s)</span>
                 </div>
+
+                @if (group.partners.length === 0) {
+                  <p class="text-sm text-base-content/70">
+                    No partner references stored for this dataspace.
+                  </p>
+                } @else {
+                  <ul class="list rounded-box border border-base-300 bg-base-200">
+                    @for (partner of group.partners; track partner.identifier) {
+                      <li class="list-row items-center">
+                        <div class="list-col-grow min-w-0">
+                          <div class="font-medium">
+                            {{ partner.nickname || partnerName(partner.identifier) }}
+                          </div>
+                          <div class="text-xs text-base-content/70 break-all">
+                            {{ partner.identifier }}
+                          </div>
+                        </div>
+                        <button
+                          class="btn btn-sm btn-ghost"
+                          type="button"
+                          [attr.aria-label]="'Remove ' + partner.identifier"
+                          (click)="showRemoveUnsupported()"
+                        >
+                          <span class="material-symbols-rounded" aria-hidden="true">
+                            person_remove
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
               </div>
-            </div>
+            </section>
           }
         </div>
       }
 
-      @if (!loading) {
-        <p class="text-sm text-base-content/70">{{ filteredPartners.length }} partner(s) shown</p>
+      @if (!loading()) {
+        <p class="text-sm text-base-content/70">
+          {{ groups().length }} dataspace(s) with partner references
+        </p>
       }
     </div>
   </div>

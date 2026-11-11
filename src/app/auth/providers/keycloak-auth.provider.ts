@@ -1,6 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { AuthConfig, OAuthEvent, OAuthInfoEvent, OAuthService } from 'angular-oauth2-oidc';
-import { filter, Subscription } from 'rxjs';
+import { AuthConfig, OAuthService } from 'angular-oauth2-oidc';
 import {
   AuthProvider,
   AuthSession,
@@ -29,27 +28,17 @@ export class KeycloakAuthProvider implements AuthProvider {
   private readonly oauth = inject(OAuthService);
   private readonly config = inject(KEYCLOAK_AUTH_CONFIG);
 
-  private configured = false;
   private postLoginRedirectUrl: string | null = null;
-  private tokenChangeSubscription: Subscription | null = null;
-  private tokenChangeListeners = new Set<() => void>();
 
   async login(returnUrl = '/home'): Promise<void> {
-    await this.ensureConfigured();
     this.oauth.initCodeFlow(this.normalizeReturnUrl(returnUrl) ?? '/home');
   }
 
   async logout(): Promise<void> {
-    await this.ensureConfigured();
-    this.tokenChangeSubscription?.unsubscribe();
-    this.tokenChangeSubscription = null;
-    this.tokenChangeListeners.clear();
     this.oauth.logOut();
   }
 
   async restoreSession(): Promise<AuthSession | null> {
-    await this.ensureConfigured();
-
     if (!this.oauth.hasValidAccessToken()) {
       return null;
     }
@@ -58,8 +47,6 @@ export class KeycloakAuthProvider implements AuthProvider {
   }
 
   async handleRedirectCallback(): Promise<AuthSession | null> {
-    await this.ensureConfigured();
-
     const params = new URLSearchParams(window.location.search);
     const isCallback = params.has('code') || params.has('state') || params.has('error');
     if (!isCallback) {
@@ -99,33 +86,7 @@ export class KeycloakAuthProvider implements AuthProvider {
     return this.createSessionFromTokens();
   }
 
-  subscribeToTokenChanges(listener: () => void): void {
-    this.tokenChangeListeners.add(listener);
-    this.setupTokenChangeSubscription();
-  }
-
-  private setupTokenChangeSubscription(): void {
-    if (this.tokenChangeSubscription || !this.configured) {
-      return;
-    }
-
-    const isTokenRefresh = (event: OAuthEvent): boolean =>
-      event.type === 'token_received' ||
-      event.type === 'token_refreshed' ||
-      (event instanceof OAuthInfoEvent && event.type === 'token_expires' && event.info === 'access_token');
-
-    this.tokenChangeSubscription = this.oauth.events
-      .pipe(filter(isTokenRefresh))
-      .subscribe(() => {
-        this.tokenChangeListeners.forEach(listener => listener());
-      });
-  }
-
-  private async ensureConfigured(): Promise<void> {
-    if (this.configured) {
-      return;
-    }
-
+  async initialize(): Promise<void> {
     const authConfig: AuthConfig = {
       issuer: this.config.issuer,
       clientId: this.config.clientId,
@@ -144,8 +105,6 @@ export class KeycloakAuthProvider implements AuthProvider {
     this.oauth.configure(authConfig);
     await this.oauth.loadDiscoveryDocument();
     this.oauth.setupAutomaticSilentRefresh();
-    this.configured = true;
-    this.setupTokenChangeSubscription();
   }
 
   private createSessionFromTokens(): AuthSession {
@@ -202,7 +161,9 @@ export class KeycloakAuthProvider implements AuthProvider {
     const applicationRoles = roles.filter(isRole);
 
     if (applicationRoles.length !== 1) {
-      throw new Error('Token must contain exactly one application role (operator, tenant-admin or tenant-user).');
+      throw new Error(
+        'Token must contain exactly one application role (operator, tenant-admin or tenant-user).',
+      );
     }
 
     return applicationRoles[0];
@@ -241,9 +202,12 @@ export class KeycloakAuthProvider implements AuthProvider {
   }
 
   private base64UrlDecode(value: string): string {
-    const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    const padded = value
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(value.length / 4) * 4, '=');
     const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
     return new TextDecoder().decode(bytes);
   }
 

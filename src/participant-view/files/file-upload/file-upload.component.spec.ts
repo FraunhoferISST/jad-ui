@@ -104,7 +104,7 @@ describe('FileUploadComponent contract selection', () => {
   }
 
   async function showDefinitions(fixture: ComponentFixture<FileUploadComponent>): Promise<void> {
-    fixture.componentInstance.selectedFiles = [file];
+    fixture.componentInstance.selectedFiles.set([file]);
     fixture.componentInstance.nextStep();
     fixture.changeDetectorRef.markForCheck();
     await fixture.whenStable();
@@ -130,9 +130,9 @@ describe('FileUploadComponent contract selection', () => {
         .sort(),
     ).toEqual(['open', 'restricted-alice', 'restricted-bob']);
     expect(getPartners).toHaveBeenCalledOnceWith();
-    expect(fixture.componentInstance.maxFileSize).toBe(1024);
-    expect(fixture.componentInstance.allowedFileTypes).toEqual(['text/plain']);
-    expect(fixture.componentInstance.loading).toBeFalse();
+    expect(fixture.componentInstance.maxFileSize()).toBe(1024);
+    expect(fixture.componentInstance.allowedFileTypes()).toEqual(['text/plain']);
+    expect(fixture.componentInstance.loading()).toBeFalse();
   });
 
   it('lists only contracts on the left and prompts for selection on the right', async () => {
@@ -148,7 +148,7 @@ describe('FileUploadComponent contract selection', () => {
     expect(list.textContent).not.toContain('Bob Ltd');
     expect(details.textContent).toContain('Select a contract to view its shared partners.');
     expect(details.textContent).not.toContain('did:web:alice');
-    expect(fixture.componentInstance.getSelectedDefinition()).toBeUndefined();
+    expect(fixture.componentInstance.selectedDefinition()).toBeUndefined();
     expect(fixture.componentInstance.canProceed()).toBeFalse();
     for (const radio of list.querySelectorAll('input')) {
       expect(radio.closest('label')?.textContent?.trim()).toBeTruthy();
@@ -226,13 +226,15 @@ describe('FileUploadComponent contract selection', () => {
 
   it('shows just a count and names for multiple partners', async () => {
     const fixture = await create();
-    fixture.componentInstance.contractSharing.set('Alpha sharing', {
-      summary: '2 partners',
-      partners: [
-        { identifier: 'did:web:alice', nickname: 'Alice Ltd' },
-        { identifier: 'did:web:bob', nickname: 'Bob Ltd' },
-      ],
-    });
+    fixture.componentInstance.contractSharing.update((current) =>
+      new Map(current).set('Alpha sharing', {
+        summary: '2 partners',
+        partners: [
+          { identifier: 'did:web:alice', nickname: 'Alice Ltd' },
+          { identifier: 'did:web:bob', nickname: 'Bob Ltd' },
+        ],
+      }),
+    );
     await showDefinitions(fixture);
     await selectContract(fixture, 0);
     const details: HTMLElement = fixture.nativeElement.querySelector('#upload-contract-sharing');
@@ -269,7 +271,7 @@ describe('FileUploadComponent contract selection', () => {
     const fixture = await create();
     await showDefinitions(fixture);
     await selectContract(fixture, 1);
-    expect(fixture.componentInstance.getSelectedDefinition()?.id).toBe('Beta sharing');
+    expect(fixture.componentInstance.selectedDefinition()?.id).toBe('Beta sharing');
     expect(fixture.componentInstance.canProceed()).toBeTrue();
     const continueButton: HTMLButtonElement =
       fixture.nativeElement.querySelector('button[type="submit"]');
@@ -295,7 +297,7 @@ describe('FileUploadComponent contract selection', () => {
     const fixture = await create();
     await showDefinitions(fixture);
     expect(fixture.nativeElement.querySelectorAll('input[type="radio"]').length).toBe(2);
-    expect(fixture.componentInstance.loading).toBeFalse();
+    expect(fixture.componentInstance.loading()).toBeFalse();
     expect(showAlert).not.toHaveBeenCalled();
     await selectContract(fixture, 0);
     const details: HTMLElement = fixture.nativeElement.querySelector('#upload-contract-sharing');

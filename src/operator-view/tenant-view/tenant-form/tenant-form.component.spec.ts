@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { REDLINE_CONFIG } from '../../redline.config';
+import { REDLINE_CONFIG } from '../../../app/redline/redline.config';
 import { TenantFormComponent } from './tenant-form.component';
 
 describe('TenantFormComponent', () => {

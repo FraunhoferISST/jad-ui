@@ -1,20 +1,19 @@
+@let file = this.file();
+@let sharing = this.contractSharing();
 <div class="flex max-h-[calc(95vh-6rem)] flex-col gap-6 overflow-y-auto pr-1">
   <div class="flex flex-col gap-6">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold">{{ file.name || 'N/A' }}</h1>
-        <p class="text-sm text-base-content/70">
-          {{ file.description || 'No description available.' }}
-        </p>
       </div>
       <div class="flex items-center gap-2">
         <button
           class="btn btn-primary btn-sm"
           type="button"
-          [disabled]="requestingTransfer"
+          [disabled]="requestingTransfer()"
           (click)="download()"
         >
-          @if (requestingTransfer) {
+          @if (requestingTransfer()) {
             <span class="loading loading-spinner loading-xs"></span>
             Downloading
           } @else {
@@ -62,7 +61,7 @@
             {{ file.origin | titlecase }}
           </span>
         </div>
-        @if (loadingSharing) {
+        @if (loadingSharing()) {
           <span
             class="loading loading-spinner loading-sm"
             role="status"
@@ -71,11 +70,11 @@
         } @else {
           <div aria-live="polite">
             <p class="font-medium">
-              {{ contractSharing?.summary || 'Partner access unavailable' }}
+              {{ sharing?.summary || 'Partner access unavailable' }}
             </p>
-            @if (contractSharing && contractSharing.partners.length > 0) {
+            @if (sharing && sharing.partners.length !== 0) {
               <ul class="mt-2 list-disc space-y-1 pl-5 text-sm" aria-label="Shared partners">
-                @for (partner of contractSharing.partners; track partner.identifier) {
+                @for (partner of sharing.partners; track partner.identifier) {
                   <li class="break-all">{{ partner.nickname || partner.identifier }}</li>
                 }
               </ul>
@@ -85,106 +84,6 @@
       }
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-2">
-      <section class="rounded-xl bg-base-200">
-        <div class="px-4 py-3">
-          <h2 class="font-semibold">Agreements</h2>
-        </div>
-        <div class="overflow-x-auto rounded-b-xl">
-          @if (loadingAgreements) {
-            <div class="p-10 text-center">
-              <span class="loading loading-spinner loading-lg"></span>
-            </div>
-          } @else {
-            <table class="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Partner</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                @if (!file.agreements || file.agreements.length === 0) {
-                  <tr>
-                    <td colspan="3" class="text-center text-base-content/70">
-                      No agreements available.
-                    </td>
-                  </tr>
-                } @else {
-                  @for (agreement of file.agreements; track agreement.id) {
-                    <tr>
-                      <td>{{ agreementPartnerName(file, agreement) }}</td>
-                      <td>
-                        <span class="badge badge-success badge-sm">Active</span>
-                      </td>
-                      <td>
-                        {{
-                          agreementDate(agreement.contractSigningDate)
-                            | date: DATE_FORMATS.dateWithTime
-                        }}
-                      </td>
-                    </tr>
-                  }
-                }
-              </tbody>
-            </table>
-          }
-        </div>
-      </section>
-
-      <section class="rounded-xl bg-base-200">
-        <div class="px-4 py-3">
-          <h2 class="font-semibold">Transfer history</h2>
-        </div>
-        <div class="overflow-x-auto rounded-b-xl">
-          @if (loadingTransferHistory) {
-            <div class="p-10 text-center">
-              <span class="loading loading-spinner loading-lg"></span>
-            </div>
-          } @else {
-            <table class="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Partner</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                @if (!file.transactionHistory || file.transactionHistory.length === 0) {
-                  <tr>
-                    <td colspan="4" class="text-center text-base-content/70">
-                      No transfer history available.
-                    </td>
-                  </tr>
-                } @else {
-                  @for (transaction of file.transactionHistory; track transaction.id) {
-                    <tr>
-                      <td>
-                        {{ (transaction.timestamp | date: DATE_FORMATS.dateWithTime) ?? 'N/A' }}
-                      </td>
-                      <td>{{ transaction.partnerName || transaction.partnerId || 'N/A' }}</td>
-                      <td>{{ transaction.type | titlecase }}</td>
-                      <td>
-                        <span
-                          class="badge"
-                          [class.badge-success]="transaction.status === 'success'"
-                          [class.badge-error]="transaction.status === 'failed'"
-                          [class.badge-warning]="transaction.status === 'pending'"
-                        >
-                          {{ transaction.status | titlecase }}
-                        </span>
-                      </td>
-                    </tr>
-                  }
-                }
-              </tbody>
-            </table>
-          }
-        </div>
-      </section>
-    </div>
+    <app-file-activity [file]="file" [contractSharing]="contractSharing()" />
   </div>
 </div>

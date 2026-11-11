@@ -41,7 +41,11 @@ class FakeApi:
         if method == "GET" or path == "/api/mgmt/v5/celexpressions/request":
             return 200, b"[]"
         parts = path.removeprefix("/api/mgmt/v5/").split("/")
-        identifier = payload["@id"] if method == "POST" else unquote(parts[1])
+        if method == "POST":
+            assert isinstance(payload, dict)
+            identifier = payload["@id"]
+        else:
+            identifier = unquote(parts[1])
         key = (parts[0], identifier)
         if method == "POST" and key in self.resources:
             return 409, b"already present"
@@ -62,7 +66,7 @@ class SeedTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.token_file = Path(self.temp.name) / "token"
         self.token_file.write_text("kubernetes-subject-secret")
-        self.schema = json.loads((ROOT / "public/config/jad-profile.json").read_text())
+        self.schema = json.loads((DIRECTORY / "jad-profile.json").read_text())
         self.expressions = json.loads((DIRECTORY / "cel-expressions.json").read_text())
         self.api = FakeApi()
         api = self.api
@@ -79,7 +83,7 @@ class SeedTests(unittest.TestCase):
             do_POST = respond
             do_PUT = respond
 
-            def log_message(self, *_):
+            def log_message(self, format, *args):
                 pass
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -233,8 +237,13 @@ class SeedTests(unittest.TestCase):
             definition = self.schema["$defs"][expression["leftOperand"] + "Constraint"]
             self.assertIn(expression["expression"], definition["$comment"])
             self.assertEqual(expression["scopes"], ["catalog", "contract.negotiation", "transfer.process"])
-        historical_source = (ROOT / "src/participant-view/utils/policy.utils.ts").read_text()
-        self.assertIn(self.expressions[-1]["expression"], historical_source)
+        # The former UI helper was removed in 91745e6; retain its exact expression
+        # as a regression fixture so existing access policies remain compatible.
+        self.assertEqual(
+            self.expressions[-1]["expression"],
+            "type(this.rightOperand) == list ? ctx.agent.id in this.rightOperand : "
+            "ctx.agent.id == this.rightOperand",
+        )
 
 
 class KustomizationTests(unittest.TestCase):
@@ -248,14 +257,15 @@ class KustomizationTests(unittest.TestCase):
             )
             documents = {}
             for document in rendered.split("\n---\n"):
-                kind = re.search(r"^kind: (\S+)$", document, re.MULTILINE).group(1)
+                kind_match = re.search(r"^kind: (\S+)$", document, re.MULTILINE)
                 metadata = document.split("\nmetadata:\n", 1)[1].split("\nspec:\n", 1)[0]
-                name = re.search(r"^  name: (\S+)$", metadata, re.MULTILINE).group(1)
-                documents[kind, name] = document
+                name_match = re.search(r"^  name: (\S+)$", metadata, re.MULTILINE)
+                assert kind_match and name_match
+                documents[kind_match.group(1), name_match.group(1)] = document
             cls.manifests[directory] = documents
 
-    def test_seed_includes_public_schema_and_stable_configmap_references(self):
-        schema_source = (ROOT / "public/config/jad-profile.json").read_text()
+    def test_seed_includes_shared_schema_and_stable_configmap_references(self):
+        schema_source = (DIRECTORY / "jad-profile.json").read_text()
         for directory in (DIRECTORY, ROOT / "ops"):
             with self.subTest(directory=directory):
                 documents = self.manifests[directory]
@@ -274,6 +284,26 @@ class KustomizationTests(unittest.TestCase):
                 self.assertIn("serviceAccountName: seed-jobs\n", job)
                 self.assertIn("ttlSecondsAfterFinished: 3600", job)
         self.assertEqual(len(self.manifests[DIRECTORY]), 4)
+
+    def test_angular_publishes_only_schema_from_seed_directory(self):
+        workspace = json.loads((ROOT / "angular.json").read_text())
+        targets = workspace["projects"]["jad-ui"]["architect"]
+        schema_asset = {
+            "glob": "jad-profile.json",
+            "input": "ops/jad-profile-seed",
+            "output": "config",
+        }
+        for target in ("build", "test"):
+            with self.subTest(target=target):
+                assets = targets[target]["options"]["assets"]
+                self.assertIn(schema_asset, assets)
+                self.assertEqual(
+                    [asset for asset in assets if asset.get("input") == "ops/jad-profile-seed"],
+                    [schema_asset],
+                )
+        self.assertFalse((ROOT / "public/config/jad-profile.json").exists())
+        for filename in ("kustomization.yaml", "kustomization.yml", "Kustomization"):
+            self.assertEqual(list((ROOT / "public").rglob(filename)), [])
 
     def test_keycloak_is_flat_and_gateway_only(self):
         documents = self.manifests[ROOT / "ops/keycloak"]

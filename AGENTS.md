@@ -22,17 +22,18 @@ Angular 21 (standalone components, lazy-loaded routes) dashboard for Eclipse Dat
 ## Architecture
 
 - Entrypoint: `src/main.ts` → `bootstrapApplication(App, appConfig)`. Providers are assembled in `src/app/app.config.ts`, not via NgModules.
+- The app-wide Redline config, models and client live in `src/app/redline/`.
 - Views are **lazy-loaded** from `src/app/app.routes.ts`. Library EDC views come from `@eclipse-edc/dashboard-core/<feature>` (home, assets, policies, contract-definitions, contract/transfer, catalog); custom code lives under `src/participant-view/` (files, explore, partners) and `src/operator-view/` (tenants, open-registrations).
-- **Three roles**: `tenant-admin` (partners and EDC views), `tenant-user` (files and explore), `operator` (tenants/registrations); all get `home`.
+- **Three roles**: `tenant-admin` (dataspaces, partners, policy builder and EDC views), `tenant-user` (files and explore), `operator` (tenants/registrations); all get `home`.
 - **`ACCESS_RULES` (`src/app/auth/access-rules.ts`) is the single source of truth** for both the route guard (`roleGuard`) and the shell menu filter. When adding a route you must keep three things in sync: `app.routes.ts`, `ACCESS_RULES`, and `public/config/app-config.json` menu items. Unknown route paths default to "allowed for any authenticated user" via `canAccess`, so forgetting ACCESS_RULES doesn't lock users out but does make a route appear in the menu for the wrong role — verify menu filtering.
-- `authGuard`/`authChildGuard`/`roleGuard` in `src/app/auth/guards/`; `/logout` is a side-effect-only route guarded by `logoutGuard`.
+- `authGuard`/`authChildGuard`/`roleGuard` are in `src/app/auth/guards/`; `/logout` uses `LogoutComponent`.
 - Login requires role-specific Keycloak token claims; missing claims reject login during callback (both tenant roles need `participant_context_id` + `edc_connector_config`; `operator` needs `operator_id`).
 
 ## Runtime config pattern
 
-- All env-specific config is JSON under `public/config/` (`app-config.json`, `auth-config.json`, `redline-config.json`, `participant-config.json`) fetched at startup, so one build serves many environments.
-- **Follow the established pattern** (see `redline.config.ts` / `keycloak-auth.config.ts`): an `InjectionToken` seeded with defaults, provided via `provideAppInitializer` that HTTP-gets the JSON and **mutates the already-injected token object in place** (so consumers holding the reference see the loaded values). Missing/invalid file → defaults retained silently.
-- `public/config/` is served as static assets (see `angular.json` assets).
+- All env-specific config is JSON under `public/config/` (`app-config.json`, `auth-config.json`, `redline-config.json`, `participant-config.json`) fetched at startup, so one build serves many environments. `participant-config.json` controls the browser DID scheme; `DID_SCHEME` independently configures the Keycloak agent.
+- **Follow the established pattern**: seed an `InjectionToken` with defaults and use `provideRuntimeConfig` in `src/app/runtime-config.ts` to load JSON and **mutate the injected object in place**. Missing/invalid files retain defaults. Auth initialization must run only after its config has loaded; participant config is loaded at startup rather than lazily.
+- `public/config/` is served as static assets (see `angular.json` assets); do not put Kubernetes manifests there. The shared JAD schema lives at `ops/jad-profile-seed/jad-profile.json`; build/test assets publish only that file at `config/jad-profile.json`.
 
 ## EDC client calls
 
@@ -46,8 +47,9 @@ Angular 21 (standalone components, lazy-loaded routes) dashboard for Eclipse Dat
 
 ## Dev environment (see README for full details)
 
-- Requires Keycloak SSO. Dev manifests under `ops/keycloak/` (`kubectl apply -k ops/keycloak/overlays/gateway`). Add `127.0.0.1 keycloak.jad.localhost` to your hosts file. Other dev services live on `*.jad.localhost` and are proxied in-cluster (jwtlet, EDC proxy, file-sharing).
-- Participant tokens come from jwtlet (Kubernetes service accounts / token API). `create-edc-connector-config.sh` provisions participant users/tokens; `ops/keycloakagent/` (Python) keeps two users per Redline participant in sync with Keycloak every 60s. Changes here are only create/update — nothing is ever deleted. Both roles currently share one EDC proxy service-account jwtlet mapping, so per-role backend scopes require separate proxy/token identities.
+- Requires Keycloak SSO. Dev manifests under `ops/` (`kubectl apply -k ops/` deploys Keycloak, keycloakagent and jad-profile-seed). Keycloak is Gateway API-only (GatewayClass `traefik`); its flat manifests are under `ops/keycloak/`. Add `127.0.0.1 keycloak.jad.localhost` to your hosts file. Other dev services live on `*.jad.localhost` and are proxied in-cluster (jwtlet, EDC proxy, file-sharing).
+- Participant tokens come from jwtlet (Kubernetes service accounts / token API). `ops/keycloakagent/` (Python) keeps two users per Redline participant in sync with Keycloak every 60s. Users are only created/updated, never deleted, and their passwords are set only on creation. Both roles currently share one EDC proxy service-account jwtlet mapping, so per-role backend scopes require separate proxy/token identities.
+- Browser bearer tokens are not automatically attached to cross-origin Redline or public DID document requests. File-sharing and Siglet use explicit credentials; do not broaden token destinations implicitly.
 - `ops/` also holds Keycloak config; keep manifest/shell-script and README in sync when touching auth/identity flows.
 
 ## Keep in sync

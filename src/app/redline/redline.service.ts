@@ -2,8 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-import { REDLINE_CONFIG } from '../redline.config';
-import { SERVICE_PROVIDER_ID } from '../redline.constants';
+import { REDLINE_CONFIG } from './redline.config';
 import {
   DataspaceInfo,
   DataspaceRequest,
@@ -11,9 +10,13 @@ import {
   HealthResponse,
   Participant,
   ParticipantDeployment,
+  PartnerReference,
   Tenant,
   TenantRegistration,
-} from '../models/redline.models';
+} from './redline.models';
+
+/** The seeded Redline service provider is the only provider supported by JAD. */
+const SERVICE_PROVIDER_ID = 1;
 
 /**
  * Service to manage dataspaces, tenants and participants under the seeded
@@ -40,24 +43,17 @@ export class RedlineService {
   // --- Server info ---------------------------------------------------------
 
   /**
-   * Calls the Redline health endpoint (`GET /api/public/health`).
-   * @returns A promise resolving to the raw health response.
-   */
-  getHealth(): Promise<HealthResponse> {
-    const baseUrl = this.config.baseUrl.replace(/\/$/, '');
-    return firstValueFrom(this.http.get<HealthResponse>(`${baseUrl}/api/public/health`));
-  }
-
-  /**
    * Checks whether the Redline backend is healthy by calling its health
    * endpoint and inspecting the reported `status`.
    * @returns A promise resolving to `true` when the status is `UP`, and
    *   `false` when the status is anything else or the request fails.
    */
   async checkHealth(): Promise<boolean> {
-    console.log('health check');
     try {
-      const health = await this.getHealth();
+      const baseUrl = this.config.baseUrl.replace(/\/$/, '');
+      const health = await firstValueFrom(
+        this.http.get<HealthResponse>(`${baseUrl}/api/public/health`),
+      );
       return health.status?.toUpperCase() === 'UP';
     } catch {
       return false;
@@ -142,6 +138,46 @@ export class RedlineService {
     );
   }
 
+  // --- Participant dataspaces and partners ----------------------------------
+
+  private participantUrl(tenantId: number, participantId: number): string {
+    return `${this.tenantsUrl}/${tenantId}/participants/${participantId}`;
+  }
+
+  getParticipantDataspaces(tenantId: number, participantId: number): Promise<DataspaceResponse[]> {
+    return firstValueFrom(
+      this.http.get<DataspaceResponse[]>(
+        `${this.participantUrl(tenantId, participantId)}/dataspaces`,
+      ),
+    );
+  }
+
+  getPartners(
+    tenantId: number,
+    participantId: number,
+    dataspaceId: number,
+  ): Promise<PartnerReference[]> {
+    return firstValueFrom(
+      this.http.get<PartnerReference[]>(
+        `${this.participantUrl(tenantId, participantId)}/partners/${dataspaceId}`,
+      ),
+    );
+  }
+
+  createPartner(
+    tenantId: number,
+    participantId: number,
+    dataspaceId: number,
+    partner: PartnerReference,
+  ): Promise<PartnerReference> {
+    return firstValueFrom(
+      this.http.post<PartnerReference>(
+        `${this.participantUrl(tenantId, participantId)}/partners/${dataspaceId}`,
+        partner,
+      ),
+    );
+  }
+
   // --- Participants --------------------------------------------------------
 
   /**
@@ -173,21 +209,6 @@ export class RedlineService {
       this.http.post<Participant>(
         `${this.tenantsUrl}/${tenantId}/participants/${participantId}/deployments`,
         deployment,
-      ),
-    );
-  }
-
-  /**
-   * Registers a data plane for a participant under the seeded service provider.
-   * @param tenantId - Database ID of the tenant.
-   * @param participantId - Database ID of the participant.
-   * @returns A promise that resolves when the data plane is registered.
-   */
-  registerDataPlane(tenantId: number, participantId: number): Promise<void> {
-    return firstValueFrom(
-      this.http.post<void>(
-        `${this.tenantsUrl}/${tenantId}/participants/${participantId}/dataplanes`,
-        {},
       ),
     );
   }

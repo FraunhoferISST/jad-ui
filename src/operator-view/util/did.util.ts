@@ -6,7 +6,7 @@
  */
 
 /** Slugifies a tenant name into a DID-safe identifier segment. */
-export function slugifyTenantName(name: string): string {
+function slugifyTenantName(name: string): string {
   return (name ?? '')
     .trim()
     .toLowerCase()

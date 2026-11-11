@@ -1,94 +1,62 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
-import { AUTH_PROVIDER, AuthSession, isRole, isTenantRole, Role } from './auth.types';
+import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { OAuthEvent, OAuthInfoEvent, OAuthService } from 'angular-oauth2-oidc';
+import { filter } from 'rxjs';
+import { AUTH_PROVIDER, AuthSession, Role } from './auth.types';
 
-/**
- * Consumer-facing facade for authentication.
- *
- * Guards, the login view, the shell and the logout flow all depend on this
- * service rather than on a concrete provider. It owns:
- *  - reactive session state (signals),
- *  - persistence of the session in `localStorage`,
- *  - delegation of the actual auth work to the injected {@link AuthProvider}.
- */
+/** Holds the authenticated session in memory and delegates OIDC operations to Keycloak. */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private static readonly STORAGE_KEY = 'edc-dashboard.auth.session';
-
   private readonly provider = inject(AUTH_PROVIDER);
-
-  private readonly _session = signal<AuthSession | null>(this.readStoredSession());
+  private readonly oauth = inject(OAuthService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly _session = signal<AuthSession | null>(null);
   private readonly _initializationError = signal<string | null>(null);
   private initializationPromise: Promise<void> | null = null;
   private initialized = false;
-  private tokenChangeSubscribed = false;
+  private providerReady = false;
 
-  /** The current session, or `null` when not authenticated. */
   readonly session = this._session.asReadonly();
-
-  /** Error encountered while initializing callback/session state, if any. */
-  readonly initializationError = this._initializationError.asReadonly();
-
-  /** Whether a user is currently authenticated. */
   readonly isAuthenticated = computed(() => this._session() !== null);
-
-  /** The current user, or `null` when not authenticated. */
   readonly user = computed(() => this._session()?.user ?? null);
-
-  /** The current user's role, or `null` when not authenticated. */
   readonly role = computed<Role | null>(() => this._session()?.user.role ?? null);
 
-  /**
-   * Initialize authentication state from provider callback/session state.
-   */
+  /** Initialize once, after the runtime auth configuration has loaded. */
   async initialize(): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
-
-    if (this.initializationPromise) {
-      return this.initializationPromise;
-    }
+    if (this.initialized) return;
+    if (this.initializationPromise) return this.initializationPromise;
 
     this.initializationPromise = this.initializeInternal()
-      .then(() => {
-        this.initialized = true;
-      })
-      .catch(err => {
-        this._initializationError.set(err instanceof Error ? err.message : 'Authentication failed.');
-        this.initialized = true;
+      .catch((error: unknown) => {
+        this._initializationError.set(
+          error instanceof Error ? error.message : 'Authentication failed.',
+        );
       })
       .finally(() => {
+        this.initialized = true;
         this.initializationPromise = null;
       });
-
     return this.initializationPromise;
   }
 
-  /**
-   * Start authentication (redirect-based for OIDC providers).
-   * @throws Error propagated from the provider on failure.
-   */
   async login(returnUrl?: string): Promise<void> {
-    await this.initialize();
+    if (!this.providerReady) {
+      throw new Error('Authentication has not been configured.');
+    }
     this._initializationError.set(null);
     await this.provider.login(returnUrl);
   }
 
-  /** Clear the session locally and on the provider side. */
   async logout(): Promise<void> {
     try {
-      await this.initialize();
       await this.provider.logout();
     } finally {
-      this.setSession(null);
+      this._session.set(null);
     }
   }
 
-  /**
-   * Returns a provider-captured post-login return URL once and clears it.
-   */
   consumePostLoginRedirectUrl(): string | null {
-    return this.provider.consumePostLoginRedirectUrl?.() ?? null;
+    return this.provider.consumePostLoginRedirectUrl();
   }
 
   consumeInitializationError(): string | null {
@@ -97,99 +65,42 @@ export class AuthService {
     return message;
   }
 
-  private setSession(session: AuthSession | null): void {
-    this._session.set(session);
-    this.persist(session);
-  }
-
-  private persist(session: AuthSession | null): void {
-    try {
-      if (session) {
-        localStorage.setItem(AuthService.STORAGE_KEY, JSON.stringify(session));
-      } else {
-        localStorage.removeItem(AuthService.STORAGE_KEY);
-      }
-    } catch {
-      // Ignore storage failures (e.g. private mode / disabled storage).
-    }
-  }
-
-  private readStoredSession(): AuthSession | null {
-    try {
-      const raw = localStorage.getItem(AuthService.STORAGE_KEY);
-      if (!raw) {
-        return null;
-      }
-      const session = JSON.parse(raw) as AuthSession;
-      // Reject sessions whose role is not a currently-valid `Role` (e.g. a
-      // tampered entry or one left over from a previous role schema). Restoring
-      // such a session would make every route guard deny access, including the
-      // `/home` fallback, producing an infinite redirect loop.
-      if (!session?.user || !isRole(session.user.role)) {
-        return null;
-      }
-
-      if (isTenantRole(session.user.role) && !session.user.participantContextId) {
-        return null;
-      }
-
-      if (isTenantRole(session.user.role) && !session.user.participantEdcConfig) {
-        return null;
-      }
-
-      if (session.user.role === 'operator' && !session.user.operatorId) {
-        return null;
-      }
-
-      if (session.expiresAt && session.expiresAt <= Date.now()) {
-        return null;
-      }
-      return session;
-    } catch {
-      return null;
-    }
-  }
-
   private async initializeInternal(): Promise<void> {
-    const callbackSession =
-      (await this.provider.handleRedirectCallback?.()) ?? null;
-
-    if (callbackSession) {
-      this.setSession(callbackSession);
-      this.subscribeToTokenChanges();
-      return;
+    // Remove the token-bearing copy written by older versions; never read it.
+    try {
+      localStorage.removeItem('edc-dashboard.auth.session');
+    } catch {
+      // Storage may be disabled; authentication itself does not rely on it.
     }
 
-    if (this.provider.restoreSession) {
-      const restored = await this.provider.restoreSession();
-      this.setSession(restored);
-    }
-    this.subscribeToTokenChanges();
+    await this.provider.initialize();
+    this.providerReady = true;
+    const callbackSession = await this.provider.handleRedirectCallback();
+    this._session.set(callbackSession ?? (await this.provider.restoreSession()));
+
+    this.oauth.events
+      .pipe(
+        filter(
+          (event: OAuthEvent) =>
+            event.type === 'token_received' ||
+            event.type === 'token_refreshed' ||
+            (event instanceof OAuthInfoEvent &&
+              event.type === 'token_expires' &&
+              event.info === 'access_token'),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => void this.refreshSession());
   }
 
-  /**
-   * Re-sync the session's token/expiry whenever the provider refreshes its
-   * tokens in the background (e.g. silent refresh), so HTTP callers never send
-   * a stale, expired bearer token.
-   */
-  private subscribeToTokenChanges(): void {
-    if (this.tokenChangeSubscribed || !this.provider.subscribeToTokenChanges) {
-      return;
+  private async refreshSession(): Promise<void> {
+    if (!this.isAuthenticated()) return;
+    try {
+      const refreshed = await this.provider.refreshSession();
+      // A late refresh must not restore a session after logout.
+      if (refreshed && this.isAuthenticated()) this._session.set(refreshed);
+    } catch {
+      // Keep the last known session if a refresh re-read fails.
     }
-    this.tokenChangeSubscribed = true;
-
-    this.provider.subscribeToTokenChanges(async () => {
-      if (!this.provider.refreshSession || !this.isAuthenticated()) {
-        return;
-      }
-      try {
-        const refreshed = await this.provider.refreshSession();
-        if (refreshed) {
-          this.setSession(refreshed);
-        }
-      } catch {
-        // Keep the last known session if a refresh re-read fails.
-      }
-    });
   }
 }

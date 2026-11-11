@@ -3,7 +3,11 @@ import { V5ContractAgreementController } from '../edc-controllers/contract-agree
 
 import { PolicyCreationController } from '../edc-controllers/policy-creation.controller';
 
+export const EDC_CUSTOM_CONTROLLERS = {
+  v5contractAgreements: V5ContractAgreementController,
+  policyCreation: PolicyCreationController,
+} as const;
+
 export type ExtendedEdcClient = EdcConnectorClient & {
-  v5contractAgreements: V5ContractAgreementController;
-  policyCreation: PolicyCreationController;
+  [Key in keyof typeof EDC_CUSTOM_CONTROLLERS]: InstanceType<(typeof EDC_CUSTOM_CONTROLLERS)[Key]>;
 };

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { REDLINE_CONFIG } from '../redline.config';
+import { REDLINE_CONFIG } from './redline.config';
 import { RedlineService } from './redline.service';
 
 describe('RedlineService seeded provider', () => {
@@ -23,6 +23,20 @@ describe('RedlineService seeded provider', () => {
   });
 
   afterEach(() => http.verify());
+
+  it('reports the health status and handles failed requests', async () => {
+    const healthy = service.checkHealth();
+    http.expectOne('http://redline.test/api/public/health').flush({ status: 'UP' });
+    expect(await healthy).toBeTrue();
+    const unhealthy = service.checkHealth();
+    http.expectOne('http://redline.test/api/public/health').flush({ status: 'DOWN' });
+    expect(await unhealthy).toBeFalse();
+    const failed = service.checkHealth();
+    http
+      .expectOne('http://redline.test/api/public/health')
+      .flush('error', { status: 500, statusText: 'Error' });
+    expect(await failed).toBeFalse();
+  });
 
   it('lists tenants directly under provider 1 without discovering providers', async () => {
     const result = service.listTenants();
@@ -119,13 +133,27 @@ describe('RedlineService seeded provider', () => {
     await result;
   });
 
-  it('registers a data plane under provider 1', async () => {
-    const result = service.registerDataPlane(7, 9);
-    const request = http.expectOne(`${tenantsUrl}/7/participants/9/dataplanes`);
+  it('loads the participant dataspaces as an array', async () => {
+    const result = service.getParticipantDataspaces(7, 9);
+    http.expectOne(`${tenantsUrl}/7/participants/9/dataspaces`).flush([{ id: 2, name: 'Demo' }]);
+    expect(await result).toEqual([{ id: 2, name: 'Demo' }]);
+  });
+
+  it('loads partner references as an array', async () => {
+    const result = service.getPartners(7, 9, 2);
+    const partner = { identifier: 'did:web:partner' };
+    http.expectOne(`${tenantsUrl}/7/participants/9/partners/2`).flush([partner]);
+    expect(await result).toEqual([partner]);
+  });
+
+  it('creates partner references for the selected participant and dataspace', async () => {
+    const partner = { identifier: 'did:web:partner', nickname: 'Partner' };
+    const result = service.createPartner(7, 9, 2, partner);
+    const request = http.expectOne(`${tenantsUrl}/7/participants/9/partners/2`);
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({});
-    request.flush(null);
-    await result;
+    expect(request.request.body).toEqual(partner);
+    request.flush(partner);
+    expect(await result).toEqual(partner);
   });
 
   it('does not fall back to other providers if the seeded provider is unavailable', async () => {

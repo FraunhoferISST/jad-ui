@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "lib-test": {
+    "jad-ui": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -15,9 +15,7 @@
           "options": {
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "polyfills": [
-              "zone.js"
-            ],
+            "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {
@@ -30,9 +28,7 @@
                 "output": "config"
               }
             ],
-            "styles": [
-              "src/styles.css"
-            ]
+            "styles": ["src/styles.css"]
           },
           "configurations": {
             "production": {
@@ -62,10 +58,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "lib-test:build:production"
+              "buildTarget": "jad-ui:build:production"
             },
             "development": {
-              "buildTarget": "lib-test:build:development"
+              "buildTarget": "jad-ui:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -76,10 +72,7 @@
         "test": {
           "builder": "@angular/build:karma",
           "options": {
-            "polyfills": [
-              "zone.js",
-              "zone.js/testing"
-            ],
+            "polyfills": ["zone.js", "zone.js/testing"],
             "tsConfig": "tsconfig.spec.json",
             "assets": [
               {
@@ -92,9 +85,7 @@
                 "output": "config"
               }
             ],
-            "styles": [
-              "src/styles.css"
-            ]
+            "styles": ["src/styles.css"]
           }
         }
       }

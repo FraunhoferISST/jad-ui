@@ -23,14 +23,10 @@ export interface SchemaNode {
   format?: string;
   pattern?: string;
   minItems?: number;
-  'x-jad-evaluation-scopes'?: string[];
 }
 
-export type PolicyPurpose = 'usage' | 'access';
-// Local editor classification, not an ODRL action or a runtime profile assignment.
-export const POLICY_PURPOSE_PROPERTY = 'jad:policyPurpose';
 export type RuleKind = 'permission' | 'prohibition' | 'obligation';
-export type ValueType = 'string' | 'array' | 'number' | 'integer' | 'boolean';
+type ValueType = 'string' | 'array' | 'number' | 'integer' | 'boolean';
 export interface ValueChoice {
   id: string;
   type: ValueType;
@@ -41,17 +37,16 @@ export interface ValueChoice {
   initial: string;
   placeholder: string;
 }
-export interface AtomicBlock {
+interface AtomicBlock {
   id: string;
   kind: 'atomic';
   title: string;
   description: string;
   operand: string;
   operators: string[];
-  evaluationScopes: string[];
   values: Record<string, ValueChoice[]>;
 }
-export interface LogicalBlock {
+interface LogicalBlock {
   id: string;
   kind: 'logical';
   title: string;
@@ -65,7 +60,6 @@ export interface RuleDefinition {
   title: string;
   actions: string[];
   blocks: BuildingBlock[];
-  duty?: RuleDefinition;
 }
 export interface ConstraintDraft {
   id: string;
@@ -78,16 +72,13 @@ export interface ConstraintDraft {
 export interface RuleDraft {
   id: string;
   kind: RuleKind;
-  name: string;
   action: string;
   constraints: ConstraintDraft[];
-  duties: RuleDraft[];
 }
 export interface PolicyCreateRequest {
   '@context': string[];
   '@type': 'PolicyDefinition';
   '@id': string;
-  privateProperties?: Record<string, unknown>;
   policy: { '@type': string; profile?: string; [key: string]: unknown };
 }
 
@@ -143,6 +134,7 @@ function valueText(value: unknown, type: ValueType): string {
 /** Interprets the reachable rule/constraint graph, not a hard-coded operand catalog. */
 export class PolicySchema {
   readonly rules: RuleDefinition[];
+  readonly usageDefinitions: RuleDefinition[];
   readonly title: string;
   readonly policyType: string;
   readonly profile: string;
@@ -169,6 +161,8 @@ export class PolicySchema {
     });
     if (!this.rules.length)
       throw new Error('The policy schema contains no supported rule collections.');
+    const order: Record<RuleKind, number> = { permission: 0, obligation: 1, prohibition: 2 };
+    this.usageDefinitions = [...this.rules].sort((a, b) => order[a.kind] - order[b.kind]);
   }
 
   resolve(node: SchemaNode, visited = new Set<string>()): SchemaNode {
@@ -247,13 +241,11 @@ export class PolicySchema {
     );
     if (!actions.length) throw new Error(`${title} has no supported action choices.`);
     const constraint = this.resolve(rule.properties?.['constraint'] ?? {}).items;
-    const duty = this.resolve(rule.properties?.['duty'] ?? {}).items;
     return {
       kind,
       title,
       actions,
       blocks: constraint ? this.buildingBlocks(constraint) : [],
-      ...(duty ? { duty: this.ruleDefinition('obligation', duty, 'Duty') } : {}),
     };
   }
 
@@ -297,7 +289,6 @@ export class PolicySchema {
           title: resolved.title ?? term,
           description: resolved.description ?? '',
           operators,
-          evaluationScopes: resolved['x-jad-evaluation-scopes'] ?? [],
           values: Object.fromEntries(
             operators.map((operator) => [
               operator,
@@ -381,34 +372,13 @@ export class PolicySchema {
     };
   }
 
-  createRule(definition: RuleDefinition, name = definition.title): RuleDraft {
+  createRule(definition: RuleDefinition): RuleDraft {
     return {
       id: crypto.randomUUID(),
       kind: definition.kind,
-      name,
       action: definition.actions[0],
       constraints: [],
-      duties: [],
     };
-  }
-
-  definitions(purpose: PolicyPurpose): RuleDefinition[] {
-    if (purpose === 'usage') {
-      const order: Record<RuleKind, number> = { permission: 0, obligation: 1, prohibition: 2 };
-      return [...this.rules].sort((a, b) => order[a.kind] - order[b.kind]);
-    }
-    return this.rules
-      .filter((rule) => rule.kind === 'permission')
-      .map((rule) => ({
-        ...rule,
-        duty: undefined,
-        blocks: rule.blocks.filter(
-          (block) =>
-            block.kind === 'logical' ||
-            !block.evaluationScopes.length ||
-            block.evaluationScopes.includes('catalog'),
-        ),
-      }));
   }
 
   constraintErrors(draft: ConstraintDraft, definition: RuleDefinition): string[] {
@@ -451,13 +421,10 @@ export class PolicySchema {
     return `${block.title} — ${operator} — ${text}`;
   }
 
-  toRequest(name: string, rules: RuleDraft[], purpose?: PolicyPurpose): PolicyCreateRequest {
-    if (purpose === 'access' && rules.some((rule) => rule.kind !== 'permission')) {
-      throw new Error('Access policies only support permissions.');
-    }
+  toRequest(name: string, rules: RuleDraft[]): PolicyCreateRequest {
     const policy: PolicyCreateRequest['policy'] = { '@type': this.policyType };
     if (this.profile) policy.profile = this.profile;
-    for (const definition of this.definitions(purpose ?? 'usage')) {
+    for (const definition of this.usageDefinitions) {
       const selected = rules.filter((rule) => rule.kind === definition.kind);
       if (selected.length)
         policy[definition.kind] = selected.map((rule) => this.serializeRule(rule, definition));
@@ -466,7 +433,6 @@ export class PolicySchema {
       '@context': ['https://w3id.org/edc/connector/management/v2'],
       '@type': 'PolicyDefinition',
       '@id': name.trim(),
-      ...(purpose ? { privateProperties: { [POLICY_PURPOSE_PROPERTY]: purpose } } : {}),
       policy,
     };
   }
@@ -477,10 +443,6 @@ export class PolicySchema {
       result['constraint'] = rule.constraints.map((value) =>
         this.serializeConstraint(value, definition),
       );
-    if (rule.duties.length) {
-      if (!definition.duty) throw new Error('This rule does not support duties.');
-      result['duty'] = rule.duties.map((duty) => this.serializeRule(duty, definition.duty!));
-    }
     return result;
   }
 

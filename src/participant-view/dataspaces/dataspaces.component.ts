@@ -10,12 +10,8 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, ValidatorFn } from '@angular/forms';
 
-import {
-  DataspaceInfo,
-  DataspaceResponse,
-  Tenant,
-} from '../../operator-view/models/redline.models';
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { DataspaceInfo, DataspaceResponse, Tenant } from '../../app/redline/redline.models';
+import { RedlineService } from '../../app/redline/redline.service';
 import { ParticipantContextService } from '../services/participant-context.service';
 
 interface DataspaceEntry extends DataspaceResponse {
@@ -41,7 +37,6 @@ const propertiesValidator: ValidatorFn = (control) =>
 
 @Component({
   selector: 'app-dataspaces',
-  standalone: true,
   imports: [ReactiveFormsModule, NgTemplateOutlet],
   templateUrl: './dataspaces.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,

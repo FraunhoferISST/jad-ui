@@ -17,7 +17,7 @@ export type Role = 'operator' | 'tenant-admin' | 'tenant-user';
  * stay in sync. The `satisfies` clause makes the compiler flag this list if a
  * member is ever added to or removed from the `Role` union.
  */
-export const ROLES = ['operator', 'tenant-admin', 'tenant-user'] as const satisfies readonly Role[];
+const ROLES = ['operator', 'tenant-admin', 'tenant-user'] as const satisfies readonly Role[];
 
 export function isTenantRole(role: Role | null): role is 'tenant-admin' | 'tenant-user' {
   return role === 'tenant-admin' || role === 'tenant-user';
@@ -25,7 +25,7 @@ export function isTenantRole(role: Role | null): role is 'tenant-admin' | 'tenan
 
 /**
  * Runtime type guard for {@link Role}. Used when validating untrusted input
- * (e.g. a session restored from `localStorage`).
+ * (e.g. role claims read from an identity token).
  */
 export function isRole(value: unknown): value is Role {
   return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
@@ -72,11 +72,7 @@ export interface AuthUser {
   operatorId?: string;
 }
 
-/**
- * A persisted authentication session. The optional {@link AuthSession.token}
- * is where an access/bearer token would live once a real backend or OAuth
- * provider is wired up.
- */
+/** Authenticated session held in memory. */
 export interface AuthSession {
   user: AuthUser;
   token?: string;
@@ -84,19 +80,10 @@ export interface AuthSession {
   expiresAt?: number;
 }
 
-/**
- * Strategy abstraction for authentication.
- *
- * This is the single seam that makes the auth system swappable. The current
- * iteration ships a Keycloak OAuth/OIDC implementation. To switch providers,
- * keep this interface and swap the binding in `provideAuth()` — nothing else
- * in the app needs to change.
- *
- * Redirect-based flows (OAuth authorization code) can use the optional
- * {@link AuthProvider.handleRedirectCallback} hook, which the app can call on
- * bootstrap to complete the login after the identity provider redirects back.
- */
+/** Required operations of the Keycloak authentication provider. */
 export interface AuthProvider {
+  /** Configure OAuth and load discovery metadata during application startup. */
+  initialize(): Promise<void>;
   /**
    * Start authentication.
    *
@@ -110,37 +97,30 @@ export interface AuthProvider {
   logout(): Promise<void>;
 
   /**
-   * Optional: restore a session on startup (e.g. silent token refresh, or
+   * Restore a session on startup (e.g. silent token refresh, or
    * reading an existing IdP session). Returns `null` when there is no session.
    */
-  restoreSession?(): Promise<AuthSession | null>;
+  restoreSession(): Promise<AuthSession | null>;
 
   /**
-   * Optional: complete a redirect-based login flow (OAuth authorization code).
+   * Complete a redirect-based login flow (OAuth authorization code).
    * Returns the resulting session, or `null` if the current URL is not a
    * redirect callback.
    */
-  handleRedirectCallback?(): Promise<AuthSession | null>;
+  handleRedirectCallback(): Promise<AuthSession | null>;
 
   /**
-   * Optional: return and clear the post-login redirect URL captured from the
+   * Return and clear the post-login redirect URL captured from the
    * provider's login state.
    */
-  consumePostLoginRedirectUrl?(): string | null;
+  consumePostLoginRedirectUrl(): string | null;
 
   /**
-   * Optional: rebuild the current session from the provider's *current* tokens
+   * Rebuild the current session from the provider's *current* tokens
    * (e.g. after a background token refresh). Returns `null` when there is no
    * valid session/token right now.
    */
-  refreshSession?(): Promise<AuthSession | null>;
-
-  /**
-   * Optional: register a listener invoked whenever the provider's tokens
-   * change (e.g. after a silent/refresh-token renewal), so the session's
-   * token/expiry can be re-synced without a page reload.
-   */
-  subscribeToTokenChanges?(listener: () => void): void;
+  refreshSession(): Promise<AuthSession | null>;
 }
 
 /**

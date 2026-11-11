@@ -5,28 +5,32 @@
         placeholder="Filter for file name, type or company ..."
         [focusShortcut]="['Alt', 'j']"
         class="min-w-72 grow"
-        (inputChange)="filter($event)"></lib-filter-input>
+        (inputChange)="filter($event)"
+      ></lib-filter-input>
 
       <select
         class="select select-lg rounded-2xl bg-base-300 shadow-xl border-none"
-        [value]="companyFilter"
-        (change)="onCompanyChange($event)">
+        [value]="companyFilter()"
+        (change)="onCompanyChange($event)"
+      >
         <option value="">All companies</option>
-        @for (partner of partners; track partner.identifier) {
+        @for (partner of partners(); track partner.identifier) {
           <option [value]="partner.identifier">{{ partner.nickname || partner.identifier }}</option>
         }
       </select>
 
       <lib-item-count-selector
         class="shadow-xl rounded-2xl"
-        [currentItemCount]="pageItemCount"
-        (itemCountChanged)="pageItemCount = $event"></lib-item-count-selector>
+        [currentItemCount]="pageItemCount()"
+        (itemCountChanged)="pageItemCount.set($event)"
+      ></lib-item-count-selector>
 
       <lib-pagination
-        [items]="filteredFiles"
-        [pageItemCount]="pageItemCount"
+        [items]="filteredFiles()"
+        [pageItemCount]="pageItemCount()"
         (pageItems)="paginationEvent($event)"
-        class="shadow-xl rounded-2xl bg-base-300 [&_button:hover]:bg-base-100 [&_.join>button]:first:rounded-l-2xl [&_.join>button]:last:rounded-r-2xl"></lib-pagination>
+        class="shadow-xl rounded-2xl bg-base-300 [&_button:hover]:bg-base-100 [&_.join>button]:first:rounded-l-2xl [&_.join>button]:last:rounded-r-2xl"
+      ></lib-pagination>
     </div>
   </div>
 
@@ -42,13 +46,13 @@
         </tr>
       </thead>
       <tbody>
-        @if (loading) {
+        @if (loading()) {
           <tr>
             <td colspan="5" class="py-12 text-center">
               <span class="loading loading-bars loading-lg opacity-75 text-primary"></span>
             </td>
           </tr>
-        } @else if (pageFiles.length === 0) {
+        } @else if (pageFiles().length === 0) {
           <tr>
             <td colspan="5" class="py-12 text-center">
               <div class="flex flex-col items-center gap-2 opacity-75">
@@ -59,13 +63,10 @@
             </td>
           </tr>
         } @else {
-          @for (file of pageFiles; track file.id) {
+          @for (file of pageFiles(); track file.id) {
             <tr>
               <td>
                 <div class="font-medium">{{ file.name || 'N/A' }}</div>
-                @if (file.description) {
-                  <div class="text-xs text-base-content/70">{{ file.description }}</div>
-                }
               </td>
               <td>
                 <span class="badge badge-soft">{{ file.type || 'N/A' }}</span>
@@ -84,9 +85,10 @@
                     <button
                       class="btn btn-sm"
                       type="button"
-                      [disabled]="requestingTransferId === file.id"
-                      (click)="requestTransferAndDownload(file)">
-                      @if (requestingTransferId === file.id) {
+                      [disabled]="requestingTransferId() === file.id"
+                      (click)="requestTransferAndDownload(file)"
+                    >
+                      @if (requestingTransferId() === file.id) {
                         <span class="loading loading-spinner loading-xs"></span>
                         Downloading
                       } @else {
@@ -98,9 +100,10 @@
                     <button
                       class="btn btn-sm"
                       type="button"
-                      [disabled]="requestingAccessId === file.id"
-                      (click)="requestAccess(file)">
-                      @if (requestingAccessId === file.id) {
+                      [disabled]="requestingAccessId() === file.id"
+                      (click)="requestAccess(file)"
+                    >
+                      @if (requestingAccessId() === file.id) {
                         <span class="loading loading-spinner loading-xs"></span>
                         Requesting
                       } @else {
@@ -122,7 +125,7 @@
     </table>
   </div>
 
-  @if (!loading) {
-    <p class="text-sm text-base-content/70">{{ filteredFiles.length }} file(s) in total</p>
+  @if (!loading()) {
+    <p class="text-sm text-base-content/70">{{ filteredFiles().length }} file(s) in total</p>
   }
 </div>

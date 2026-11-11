@@ -19,9 +19,10 @@ describe('PolicyBuilderComponent', () => {
     });
     fixture = TestBed.createComponent(PolicyBuilderComponent);
     component = fixture.componentInstance;
+    fixture.autoDetectChanges();
   });
 
-  it('loads three fixed categories without a policy-type selector or rule editor', async () => {
+  it('loads three fixed categories without a policy-type selector', async () => {
     await fixture.whenStable();
     expect(service.loadSchema).toHaveBeenCalledTimes(1);
     expect(component.rules().map((rule) => rule.kind)).toEqual([
@@ -30,12 +31,11 @@ describe('PolicyBuilderComponent', () => {
       'prohibition',
     ]);
     expect(fixture.nativeElement.querySelector('[aria-label="Select Policy Type"]')).toBeNull();
-    expect(fixture.nativeElement.querySelector('app-rule-editor')).toBeNull();
     expect(component.selectedConstraint()).toBeUndefined();
     expect(component.result().request!.policy['permission']).toEqual([{ action: 'use' }]);
     expect(component.result().request!.policy['obligation']).toBeUndefined();
     expect(component.result().request!.policy['prohibition']).toBeUndefined();
-    expect(component.result().request!.privateProperties).toBeUndefined();
+    expect('privateProperties' in component.result().request!).toBeFalse();
     expect(component.canCreate()).toBeFalse();
     const button: HTMLButtonElement = fixture.nativeElement.querySelector('button[type="submit"]');
     expect(button.disabled).toBeTrue();
@@ -135,7 +135,7 @@ describe('PolicyBuilderComponent', () => {
     await fixture.whenStable();
     expect(service.createPolicy).toHaveBeenCalledOnceWith(request);
     expect(Object.keys(request)).not.toContain('id');
-    expect(request.privateProperties).toBeUndefined();
+    expect('privateProperties' in request).toBeFalse();
     expect(component.createdName()).toBe('Partner policy');
     expect(component.canCreate()).toBeFalse();
     expect(fixture.nativeElement.textContent).toContain('was created successfully');

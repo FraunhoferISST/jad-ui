@@ -1,98 +1,90 @@
-import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { EnvironmentProviders, inject, Injectable, InjectionToken } from '@angular/core';
+import { isConfigObject, provideRuntimeConfig } from '../../app/runtime-config';
 
-export interface ParticipantUploadConfig {
+interface ParticipantUploadConfig {
   maxFileSize: number;
   allowedFileTypes: string[];
 }
-
-export interface ParticipantFileSharingConfig {
+interface ParticipantFileSharingConfig {
   baseUrl: string;
 }
-
-export interface ParticipantSigletConfig {
+interface ParticipantSigletConfig {
   baseUrl: string;
 }
-
+interface ParticipantDidConfig {
+  scheme: 'http' | 'https';
+}
 interface ParticipantFeatureConfig {
+  did: ParticipantDidConfig;
   upload: ParticipantUploadConfig;
   fileSharing: ParticipantFileSharingConfig;
   siglet: ParticipantSigletConfig;
 }
 
-const DEFAULT_CONFIG: ParticipantFeatureConfig = {
-  upload: {
-    maxFileSize: 10 * 1024 * 1024,
-    allowedFileTypes: [],
+export const PARTICIPANT_CONFIG = new InjectionToken<ParticipantFeatureConfig>(
+  'PARTICIPANT_CONFIG',
+  {
+    factory: () => ({
+      did: { scheme: 'http' },
+      upload: { maxFileSize: 10 * 1024 * 1024, allowedFileTypes: [] },
+      fileSharing: { baseUrl: 'http://file-sharing-app.localhost' },
+      siglet: { baseUrl: 'http://edc-proxy.localhost/proxy/siglet' },
+    }),
   },
-  fileSharing: {
-    baseUrl: 'http://file-sharing-app.localhost',
-  },
-  siglet: {
-    baseUrl: 'http://edc-proxy.localhost/proxy/issuerservice',
-  },
-};
+);
+
+export function provideParticipantConfig(
+  url = 'config/participant-config.json',
+): EnvironmentProviders {
+  return provideRuntimeConfig(PARTICIPANT_CONFIG, url, (config, loaded) => {
+    if (!isConfigObject(loaded)) return;
+    const did = loaded['did'];
+    if (isConfigObject(did) && (did['scheme'] === 'http' || did['scheme'] === 'https')) {
+      config.did.scheme = did['scheme'];
+    }
+    const upload = loaded['upload'];
+    if (isConfigObject(upload)) {
+      if (typeof upload['maxFileSize'] === 'number')
+        config.upload.maxFileSize = upload['maxFileSize'];
+      if (Array.isArray(upload['allowedFileTypes'])) {
+        config.upload.allowedFileTypes = upload['allowedFileTypes'].filter(
+          (type: unknown): type is string => typeof type === 'string',
+        );
+      }
+    }
+    const fileSharing = loaded['fileSharing'];
+    if (
+      isConfigObject(fileSharing) &&
+      typeof fileSharing['baseUrl'] === 'string' &&
+      fileSharing['baseUrl'].trim()
+    ) {
+      config.fileSharing.baseUrl = fileSharing['baseUrl'];
+    }
+    const siglet = loaded['siglet'];
+    if (
+      isConfigObject(siglet) &&
+      typeof siglet['baseUrl'] === 'string' &&
+      siglet['baseUrl'].trim()
+    ) {
+      config.siglet.baseUrl = siglet['baseUrl'];
+    }
+  });
+}
 
 @Injectable({ providedIn: 'root' })
 export class ParticipantConfigService {
-  private readonly http = inject(HttpClient);
+  private readonly config = inject(PARTICIPANT_CONFIG);
 
-  private configPromise: Promise<ParticipantFeatureConfig> | null = null;
-
-  async getConfig(): Promise<ParticipantFeatureConfig> {
-    if (!this.configPromise) {
-      this.configPromise = this.loadConfig();
-    }
-    return this.configPromise;
+  async getDidConfig(): Promise<ParticipantDidConfig> {
+    return this.config.did;
   }
-
   async getUploadConfig(): Promise<ParticipantUploadConfig> {
-    return (await this.getConfig()).upload;
+    return this.config.upload;
   }
-
   async getFileSharingConfig(): Promise<ParticipantFileSharingConfig> {
-    return (await this.getConfig()).fileSharing;
+    return this.config.fileSharing;
   }
-
   async getSigletConfig(): Promise<ParticipantSigletConfig> {
-    return (await this.getConfig()).siglet;
-  }
-
-  private async loadConfig(): Promise<ParticipantFeatureConfig> {
-    try {
-      const loaded = await firstValueFrom(
-        this.http.get<Partial<ParticipantFeatureConfig>>('config/participant-config.json'),
-      );
-
-      const upload: ParticipantUploadConfig = {
-        maxFileSize:
-          typeof loaded.upload?.maxFileSize === 'number'
-            ? loaded.upload.maxFileSize
-            : DEFAULT_CONFIG.upload.maxFileSize,
-        allowedFileTypes: Array.isArray(loaded.upload?.allowedFileTypes)
-          ? loaded.upload.allowedFileTypes.filter((type) => typeof type === 'string')
-          : DEFAULT_CONFIG.upload.allowedFileTypes,
-      };
-
-      const fileSharing: ParticipantFileSharingConfig = {
-        baseUrl:
-          typeof loaded.fileSharing?.baseUrl === 'string' &&
-          loaded.fileSharing.baseUrl.trim().length > 0
-            ? loaded.fileSharing.baseUrl
-            : DEFAULT_CONFIG.fileSharing.baseUrl,
-      };
-
-      const siglet: ParticipantSigletConfig = {
-        baseUrl:
-          typeof loaded.siglet?.baseUrl === 'string' && loaded.siglet.baseUrl.trim().length > 0
-            ? loaded.siglet.baseUrl
-            : DEFAULT_CONFIG.siglet.baseUrl,
-      };
-
-      return { upload, fileSharing, siglet };
-    } catch {
-      return DEFAULT_CONFIG;
-    }
+    return this.config.siglet;
   }
 }

@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
-import { ContractDefinition } from '@think-it-labs/edc-connector-client';
+import { ContractAgreement, ContractDefinition } from '@think-it-labs/edc-connector-client';
+import { FileActivityComponent } from '../../file-activity/file-activity.component';
 
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
@@ -119,12 +121,11 @@ describe('FileDetailComponent sharing', () => {
     expect(fixture.nativeElement.textContent).toContain('2 partners');
     expect(partnerNames(fixture)).toEqual(['Alice Ltd', 'Bob Ltd']);
     expect(fixture.nativeElement.textContent).not.toContain('did:web:alice');
-    expect(
-      fixture.componentInstance.agreementPartnerName(fixture.componentInstance.file, {
-        providerId: 'provider',
-        consumerId: 'did:web:bob',
-      }),
-    ).toBe('Bob Ltd');
+    const agreement = new ContractAgreement();
+    agreement.setValue('edc', 'consumerId', 'did:web:bob');
+    const activity = fixture.debugElement.query(By.directive(FileActivityComponent))
+      .componentInstance as FileActivityComponent;
+    expect(activity.agreementPartnerName(agreement)).toBe('Bob Ltd');
   });
 
   it('applies both policies to the partner list', async () => {
@@ -164,13 +165,15 @@ describe('FileDetailComponent sharing', () => {
     const fixture = await create();
     expect(fixture.nativeElement.textContent).toContain('Partner access unavailable');
     expect(fixture.nativeElement.textContent).not.toContain('Not shared with any partners.');
-    expect(getAgreements).toHaveBeenCalledOnceWith(fixture.componentInstance.file);
-    expect(getHistory).toHaveBeenCalledOnceWith(fixture.componentInstance.file);
-    expect(fixture.componentInstance.loadingAgreements).toBeFalse();
-    expect(fixture.componentInstance.loadingTransferHistory).toBeFalse();
+    expect(getAgreements).toHaveBeenCalledOnceWith(fixture.componentInstance.file());
+    expect(getHistory).toHaveBeenCalledOnceWith(fixture.componentInstance.file());
+    const activity = fixture.debugElement.query(By.directive(FileActivityComponent))
+      .componentInstance as FileActivityComponent;
+    expect(activity.loadingAgreements()).toBeFalse();
+    expect(activity.loadingTransferHistory()).toBeFalse();
     expect(showAlert).not.toHaveBeenCalled();
     await fixture.componentInstance.download();
-    expect(downloadFile).toHaveBeenCalledOnceWith(fixture.componentInstance.file);
+    expect(downloadFile).toHaveBeenCalledOnceWith(fixture.componentInstance.file());
   });
 
   it('keeps the stored definition visible when it cannot be loaded', async () => {
@@ -179,7 +182,7 @@ describe('FileDetailComponent sharing', () => {
     expect(fixture.nativeElement.textContent).toContain('consumer-share');
     expect(fixture.nativeElement.textContent).toContain('Partner access unavailable');
     expect(getPolicy).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.loadingSharing).toBeFalse();
+    expect(fixture.componentInstance.loadingSharing()).toBeFalse();
     expect(showAlert).not.toHaveBeenCalled();
   });
 

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 
 import { AuthService } from '../../app/auth/auth.service';
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { RedlineService } from '../../app/redline/redline.service';
 import { ParticipantContextService } from './participant-context.service';
 
 describe('ParticipantContextService', () => {
@@ -39,20 +39,16 @@ describe('ParticipantContextService', () => {
     expect(redline.getTenant).not.toHaveBeenCalled();
   });
 
-  it('loads tenant details when participants are absent from the tenant list', async () => {
+  it('does not make per-tenant requests when participants are absent', async () => {
     redline.listTenants.and.resolveTo([{ ...tenant, participants: [] }]);
-    redline.getTenant.and.resolveTo(tenant);
-    expect(await service.resolve()).toEqual(context);
-    expect(redline.getTenant).toHaveBeenCalledOnceWith(7);
+    await expectAsync(service.resolve()).toBeRejectedWithError(/seeded service provider/);
+    expect(redline.getTenant).not.toHaveBeenCalled();
   });
 
-  it('shares in-flight lookups and caches the resolved context until reset', async () => {
+  it('shares in-flight lookups and caches the resolved context', async () => {
     expect(await Promise.all([service.resolve(), service.resolve()])).toEqual([context, context]);
     expect(await service.resolve()).toEqual(context);
     expect(redline.listTenants).toHaveBeenCalledTimes(1);
-    service.reset();
-    expect(await service.resolve()).toEqual(context);
-    expect(redline.listTenants).toHaveBeenCalledTimes(2);
   });
 
   it('rejects unmatched DIDs rather than searching another provider', async () => {

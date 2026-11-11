@@ -16,7 +16,6 @@ import { AuthService } from '../auth/auth.service';
  */
 @Component({
   selector: 'app-user-menu',
-  standalone: true,
   imports: [RouterLink],
   templateUrl: './user-menu.component.html',
 })

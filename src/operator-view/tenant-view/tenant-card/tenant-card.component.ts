@@ -1,44 +1,40 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 import {
   DataspaceResponse,
   Participant,
   Tenant,
   VirtualParticipantAgent,
-} from '../../models/redline.models';
+} from '../../../app/redline/redline.models';
 import { isParticipantActive } from '../../util/deployment.util';
 
 /**
  * Card combining a tenant with its participant(s). Shows the tenant header
  * together with each participant's agents and dataspace memberships, and emits
- * events to deploy a participant or register a data plane for it.
+ * an event to deploy a participant.
  */
 @Component({
-  selector: 'tenant-card',
-  standalone: true,
+  selector: 'app-tenant-card',
   templateUrl: './tenant-card.component.html',
 })
 export class TenantCardComponent {
-  @Input({ required: true }) tenant!: Tenant;
+  readonly tenant = input.required<Tenant>();
 
   /** Dataspaces available, used to resolve dataspace names from their IDs. */
-  @Input() dataspaces: DataspaceResponse[] = [];
+  readonly dataspaces = input<DataspaceResponse[]>([]);
 
   /** IDs of participants currently being polled for deployment status. */
-  @Input() pollingParticipantIds: ReadonlySet<number> = new Set<number>();
+  readonly pollingParticipantIds = input<ReadonlySet<number>>(new Set<number>());
 
   /** Whether the deploy action is offered for this card's participants. */
-  @Input() canDeploy = true;
+  readonly canDeploy = input(true);
 
   /** Emitted when the user requests to deploy a participant. */
-  @Output() deploy = new EventEmitter<Participant>();
-
-  /** Emitted when the user requests to register a data plane for a participant. */
-  @Output() registerDataPlane = new EventEmitter<Participant>();
+  readonly deploy = output<Participant>();
 
   /** Resolves a dataspace's display name from its ID, if known. */
   dataspaceName(dataspaceId: number): string | undefined {
-    return this.dataspaces.find(dataspace => dataspace.id === dataspaceId)?.name;
+    return this.dataspaces().find((dataspace) => dataspace.id === dataspaceId)?.name;
   }
 
   /** Returns a participant's agents sorted alphabetically by type. */
@@ -50,7 +46,7 @@ export class TenantCardComponent {
 
   /** Whether the given participant is currently being polled. */
   isPolling(participant: Participant): boolean {
-    return this.pollingParticipantIds.has(participant.id);
+    return this.pollingParticipantIds().has(participant.id);
   }
 
   /** Whether the participant has agents and every one of them is ACTIVE. */

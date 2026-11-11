@@ -1,9 +1,9 @@
-import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, inject, Output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, computed, inject, output, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { EdcClientService, ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 import { ContractDefinition } from '@think-it-labs/edc-connector-client';
-
 import { ContractSharingService } from '../../services/contract-sharing.service';
 import { ParticipantConfigService } from '../../services/participant-config.service';
 import { UploadService } from '../../services/upload.service';
@@ -11,9 +11,8 @@ import { formatFileSize } from '../../utils/format.utils';
 import { ContractSharing } from '../../utils/contract-sharing';
 
 @Component({
-  selector: 'participant-file-upload',
-  standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  selector: 'app-participant-file-upload',
+  imports: [NgTemplateOutlet, ReactiveFormsModule],
   templateUrl: './file-upload.component.html',
   host: { class: 'block min-w-0 max-w-full' },
 })
@@ -25,29 +24,34 @@ export class FileUploadComponent {
   private readonly configService = inject(ParticipantConfigService);
   private readonly sharingService = inject(ContractSharingService);
 
-  @Output() cancel = new EventEmitter<void>();
-  @Output() uploaded = new EventEmitter<number>();
-
+  readonly cancel = output<void>();
+  readonly uploaded = output<number>();
   readonly formatFileSize = formatFileSize;
-  readonly form = this.fb.nonNullable.group({
-    contractDefinitionId: ['', Validators.required],
-  });
-
-  uploadStep = 1;
-  selectedFiles: File[] = [];
-  contractDefinitions: ContractDefinition[] = [];
-  contractSharing = new Map<string, ContractSharing>();
-  filePreviewData: Array<{
-    name: string;
-    size: number;
-    type: string;
-  }> = [];
-
-  uploading = false;
-  loading = true;
-  maxFileSize = 10 * 1024 * 1024;
-  allowedFileTypes: string[] = [];
-
+  readonly form = this.fb.nonNullable.group({ contractDefinitionId: ['', Validators.required] });
+  private readonly selectedDefinitionId = toSignal(
+    this.form.controls.contractDefinitionId.valueChanges,
+    {
+      initialValue: this.form.controls.contractDefinitionId.value,
+    },
+  );
+  readonly uploadStep = signal(1);
+  readonly selectedFiles = signal<File[]>([]);
+  readonly contractDefinitions = signal<ContractDefinition[]>([]);
+  readonly contractSharing = signal<ReadonlyMap<string, ContractSharing>>(new Map());
+  readonly filePreviewData = computed(() =>
+    this.selectedFiles().map((file) => ({
+      name: file.name,
+      size: file.size,
+      type: file.type || 'application/octet-stream',
+    })),
+  );
+  readonly selectedDefinition = computed(() =>
+    this.contractDefinitions().find((definition) => definition.id === this.selectedDefinitionId()),
+  );
+  readonly uploading = signal(false);
+  readonly loading = signal(true);
+  readonly maxFileSize = signal(0);
+  readonly allowedFileTypes = signal<string[]>([]);
   readonly uploadSteps = [
     { label: 'Select file', number: 1 },
     { label: 'Contract definition', number: 2 },
@@ -60,24 +64,21 @@ export class FileUploadComponent {
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (!input.files) {
-      return;
-    }
-
+    if (!input.files) return;
     const files = Array.from(input.files);
-    const tooLarge = files.find((file) => file.size > this.maxFileSize);
+    const tooLarge = files.find((file) => file.size > this.maxFileSize());
     if (tooLarge) {
       this.modalAndAlert.showAlert(
-        `File "${tooLarge.name}" exceeds max size ${formatFileSize(this.maxFileSize)}.`,
+        `File "${tooLarge.name}" exceeds max size ${formatFileSize(this.maxFileSize())}.`,
         'Upload validation',
         'error',
         8,
       );
       return;
     }
-
-    if (this.allowedFileTypes.length > 0) {
-      const invalid = files.find((file) => !this.allowedFileTypes.includes(file.type));
+    const allowed = this.allowedFileTypes();
+    if (allowed.length) {
+      const invalid = files.find((file) => !allowed.includes(file.type));
       if (invalid) {
         this.modalAndAlert.showAlert(
           `File "${invalid.name}" has unsupported type ${invalid.type || 'unknown'}.`,
@@ -88,74 +89,35 @@ export class FileUploadComponent {
         return;
       }
     }
-
-    this.selectedFiles = files;
+    this.selectedFiles.set(files);
   }
 
   nextStep(): void {
-    if (!this.canProceed()) {
-      return;
-    }
-
-    if (this.uploadStep === 2) {
-      this.preparePreview();
-    }
-
-    this.uploadStep += 1;
+    if (this.canProceed()) this.uploadStep.update((step) => step + 1);
   }
-
   previousStep(): void {
-    if (this.uploadStep > 1) {
-      this.uploadStep -= 1;
-    }
+    if (this.uploadStep() > 1) this.uploadStep.update((step) => step - 1);
   }
-
-  goToStep(step: number): void {
-    if (!this.canNavigateToStep(step)) {
-      return;
-    }
-    if (step === 3) {
-      this.preparePreview();
-    }
-    this.uploadStep = step;
-  }
-
-  canNavigateToStep(step: number): boolean {
-    if (step <= 1) {
-      return true;
-    }
-    return this.selectedFiles.length > 0 && (step !== 3 || this.form.valid);
-  }
-
   canProceed(): boolean {
-    if (this.uploadStep === 1) {
-      return this.selectedFiles.length > 0;
-    }
-    return this.uploadStep !== 2 || this.form.valid;
+    return this.uploadStep() === 1
+      ? this.selectedFiles().length > 0
+      : this.uploadStep() !== 2 || this.form.valid;
   }
 
   async upload(): Promise<void> {
-    if (this.selectedFiles.length === 0 || this.uploading) {
-      return;
-    }
-
+    const files = this.selectedFiles();
+    if (!files.length || this.uploading()) return;
     const contractDefinitionId = this.form.controls.contractDefinitionId.value;
-    if (!contractDefinitionId || this.form.invalid) {
-      return;
-    }
-
-    this.uploading = true;
+    if (!contractDefinitionId || this.form.invalid) return;
+    this.uploading.set(true);
     try {
-      for (const file of this.selectedFiles) {
-        await this.uploadService.uploadFile(file, contractDefinitionId);
-      }
-
-      this.uploaded.emit(this.selectedFiles.length);
+      for (const file of files) await this.uploadService.uploadFile(file, contractDefinitionId);
+      this.uploaded.emit(files.length);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to upload file.';
       this.modalAndAlert.showAlert(message, 'Upload failed', 'error', 8);
     } finally {
-      this.uploading = false;
+      this.uploading.set(false);
     }
   }
 
@@ -163,37 +125,21 @@ export class FileUploadComponent {
     this.cancel.emit();
   }
 
-  getSelectedDefinition(): ContractDefinition | undefined {
-    return this.contractDefinitions.find(
-      (definition) => definition.id === this.form.controls.contractDefinitionId.value,
-    );
-  }
-
-  private preparePreview(): void {
-    this.filePreviewData = this.selectedFiles.map((file) => ({
-      name: file.name,
-      size: file.size,
-      type: file.type || 'application/octet-stream',
-    }));
-  }
-
   private async loadData(): Promise<void> {
-    this.loading = true;
+    this.loading.set(true);
     try {
+      const uploadConfig = await this.configService.getUploadConfig();
+      this.maxFileSize.set(uploadConfig.maxFileSize);
+      this.allowedFileTypes.set(uploadConfig.allowedFileTypes);
       const client = await this.edcClientService.getClient();
-      const [definitions, uploadConfig] = await Promise.all([
-        client.management.contractDefinitions.queryAll(),
-        this.configService.getUploadConfig(),
-      ]);
-      this.contractSharing = await this.sharingService.getSharing(definitions);
-      this.contractDefinitions = definitions.sort((a, b) => a.id.localeCompare(b.id));
-      this.maxFileSize = uploadConfig.maxFileSize;
-      this.allowedFileTypes = uploadConfig.allowedFileTypes;
+      const definitions = await client.management.contractDefinitions.queryAll();
+      this.contractSharing.set(await this.sharingService.getSharing(definitions));
+      this.contractDefinitions.set(definitions.sort((a, b) => a.id.localeCompare(b.id)));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load upload metadata.';
       this.modalAndAlert.showAlert(message, 'Upload setup', 'error', 8);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 }

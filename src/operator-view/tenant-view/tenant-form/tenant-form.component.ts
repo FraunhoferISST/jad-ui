@@ -1,15 +1,14 @@
-import { Component, EventEmitter, inject, Output } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { JsonObjectInputComponent } from '@eclipse-edc/dashboard-core';
 
-import { TenantRegistration } from '../../models/redline.models';
+import { TenantRegistration } from '../../../app/redline/redline.models';
 import { generateParticipantDid } from '../../util/did.util';
-import { REDLINE_CONFIG } from '../../redline.config';
+import { REDLINE_CONFIG } from '../../../app/redline/redline.config';
 
 /** Tenant registration without membership assignment, rendered inside a modal. */
 @Component({
-  selector: 'tenant-form',
-  standalone: true,
+  selector: 'app-tenant-form',
   imports: [ReactiveFormsModule, JsonObjectInputComponent],
   templateUrl: './tenant-form.component.html',
 })
@@ -17,8 +16,7 @@ export class TenantFormComponent {
   private readonly fb = inject(FormBuilder);
   private readonly config = inject(REDLINE_CONFIG);
 
-  @Output() save = new EventEmitter<TenantRegistration>();
-  @Output() cancel = new EventEmitter<void>();
+  readonly save = output<TenantRegistration>();
 
   readonly form = this.fb.nonNullable.group({
     tenantName: ['', [Validators.required, Validators.pattern(/\S/)]],

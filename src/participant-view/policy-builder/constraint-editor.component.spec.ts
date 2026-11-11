@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import document from '../../../ops/jad-profile-seed/jad-profile.json';
 import { ConstraintEditorComponent } from './constraint-editor.component';
-import { AtomicBlock, PolicySchema } from './policy-schema';
+import { BuildingBlock, PolicySchema } from './policy-schema';
+
+type AtomicBlock = Extract<BuildingBlock, { kind: 'atomic' }>;
 
 describe('ConstraintEditorComponent', () => {
   let fixture: ComponentFixture<ConstraintEditorComponent>;
@@ -15,6 +17,8 @@ describe('ConstraintEditorComponent', () => {
     component = fixture.componentInstance;
     fixture.componentRef.setInput('schema', schema);
     fixture.componentRef.setInput('definition', schema.rules[0]);
+    fixture.componentRef.setInput('draft', schema.createConstraint(schema.rules[0].blocks[0]));
+    fixture.autoDetectChanges();
   });
 
   it('switches counterparty from a scalar field to a list field when the operator changes', async () => {

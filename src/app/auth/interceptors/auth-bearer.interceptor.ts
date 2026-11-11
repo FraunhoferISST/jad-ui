@@ -1,11 +1,19 @@
-import { HttpInterceptorFn } from '@angular/common/http';
+import { HttpContextToken, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { AuthService } from '../auth.service';
+
+/** Explicitly opt public requests out of application bearer authentication. */
+export const SKIP_BEARER_AUTH = new HttpContextToken(() => false);
 
 const PUBLIC_PATHS = ['/config/', '/api/public/', '/realms/', '/protocol/openid-connect/'];
 
 export const authBearerInterceptor: HttpInterceptorFn = (req, next) => {
-  if (req.headers.has('Authorization') || isPublicRequest(req.url) || !isSameOriginRequest(req.url)) {
+  if (
+    req.context.get(SKIP_BEARER_AUTH) ||
+    req.headers.has('Authorization') ||
+    isPublicRequest(req.url) ||
+    !isSameOriginRequest(req.url)
+  ) {
     return next(req);
   }
 
@@ -22,15 +30,20 @@ export const authBearerInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 function isPublicRequest(url: string): boolean {
-  const normalized = url.toLowerCase();
-  return PUBLIC_PATHS.some(path => normalized.includes(path));
+  try {
+    const normalized = url.toLowerCase();
+    const path = new URL(url, window.location.origin).pathname.toLowerCase();
+    // Keep the existing public-URL exclusions, including query strings, while
+    // also recognizing relative paths such as `config/app-config.json`.
+    return PUBLIC_PATHS.some(
+      (publicPath) => normalized.includes(publicPath) || path.includes(publicPath),
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isSameOriginRequest(url: string): boolean {
-  if (url.startsWith('/')) {
-    return true;
-  }
-
   try {
     const parsed = new URL(url, window.location.origin);
     return parsed.origin === window.location.origin;

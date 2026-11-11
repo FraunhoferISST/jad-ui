@@ -5,26 +5,30 @@
         placeholder="Filter for file ID, name or content type ..."
         [focusShortcut]="['Alt', 'j']"
         class="min-w-72 grow"
-        (inputChange)="filter($event)"></lib-filter-input>
+        (inputChange)="filter($event)"
+      ></lib-filter-input>
 
       <button
         class="btn btn-lg btn-primary rounded-2xl btn-soft shadow-xl !text-sm border-none"
         type="button"
-        (click)="openUpload()">
+        (click)="openUpload()"
+      >
         <span class="material-symbols-rounded">upload_file</span>
         Add file
       </button>
 
       <lib-item-count-selector
         class="shadow-xl rounded-2xl"
-        [currentItemCount]="pageItemCount"
-        (itemCountChanged)="pageItemCount = $event"></lib-item-count-selector>
+        [currentItemCount]="pageItemCount()"
+        (itemCountChanged)="pageItemCount.set($event)"
+      ></lib-item-count-selector>
 
       <lib-pagination
-        [items]="filteredFiles"
-        [pageItemCount]="pageItemCount"
+        [items]="filteredFiles()"
+        [pageItemCount]="pageItemCount()"
         (pageItems)="paginationEvent($event)"
-        class="shadow-xl rounded-2xl bg-base-300 [&_button:hover]:bg-base-100 [&_.join>button]:first:rounded-l-2xl [&_.join>button]:last:rounded-r-2xl"></lib-pagination>
+        class="shadow-xl rounded-2xl bg-base-300 [&_button:hover]:bg-base-100 [&_.join>button]:first:rounded-l-2xl [&_.join>button]:last:rounded-r-2xl"
+      ></lib-pagination>
     </div>
   </div>
 
@@ -41,13 +45,13 @@
         </tr>
       </thead>
       <tbody>
-        @if (loading) {
+        @if (loading()) {
           <tr>
             <td colspan="6" class="py-12 text-center">
               <span class="loading loading-bars loading-lg opacity-75 text-primary"></span>
             </td>
           </tr>
-        } @else if (pageFiles.length === 0) {
+        } @else if (pageFiles().length === 0) {
           <tr>
             <td colspan="6" class="py-12 text-center">
               <div class="flex flex-col items-center gap-2 opacity-75">
@@ -58,7 +62,7 @@
             </td>
           </tr>
         } @else {
-          @for (file of pageFiles; track file.id) {
+          @for (file of pageFiles(); track file.id) {
             <tr>
               <td>
                 <div class="font-medium">{{ file.name || 'N/A' }}</div>
@@ -67,18 +71,26 @@
                 <span class="badge badge-soft">{{ file.type || 'N/A' }}</span>
               </td>
               <td>{{ formatFileSize(file.size) }}</td>
-              <td>{{ file.uploadedAt ? (file.uploadedAt | date: DATE_FORMATS.dateWithTime) : 'N/A' }}</td>
               <td>
-                <span class="badge badge-soft" [class.badge-primary]="file.origin === 'owned'" [class.badge-secondary]="file.origin === 'remote'">{{ (file.origin | titlecase) || 'N/A' }}</span>
+                {{ file.uploadedAt ? (file.uploadedAt | date: DATE_FORMATS.dateWithTime) : 'N/A' }}
+              </td>
+              <td>
+                <span
+                  class="badge badge-soft"
+                  [class.badge-primary]="file.origin === 'owned'"
+                  [class.badge-secondary]="file.origin === 'remote'"
+                  >{{ (file.origin | titlecase) || 'N/A' }}</span
+                >
               </td>
               <td>
                 <div class="flex justify-end gap-2">
                   <button
                     class="btn btn-sm"
                     type="button"
-                    [disabled]="downloadingId === file.id"
-                    (click)="download(file)">
-                    @if (downloadingId === file.id) {
+                    [disabled]="downloadingId() === file.id"
+                    (click)="download(file)"
+                  >
+                    @if (downloadingId() === file.id) {
                       <span class="loading loading-spinner loading-xs"></span>
                       Downloading
                     } @else {
@@ -99,7 +111,7 @@
     </table>
   </div>
 
-  @if (!loading) {
-    <p class="text-sm text-base-content/70">{{ filteredFiles.length }} file(s) in total</p>
+  @if (!loading()) {
+    <p class="text-sm text-base-content/70">{{ filteredFiles().length }} file(s) in total</p>
   }
 </div>

@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { OAuthEvent, OAuthService, OAuthSuccessEvent } from 'angular-oauth2-oidc';
+import { Subject } from 'rxjs';
 import { AuthService } from './auth.service';
 import { AUTH_PROVIDER, AuthProvider, AuthSession } from './auth.types';
 
@@ -30,19 +32,6 @@ function participantSession(overrides: Partial<AuthSession> = {}): AuthSession {
   };
 }
 
-function operatorSession(overrides: Partial<AuthSession> = {}): AuthSession {
-  return {
-    user: {
-      username: 'operator',
-      role: 'operator',
-      displayName: 'Operator',
-      operatorId: 'opr-001',
-    },
-    token: 'stub-token',
-    ...overrides,
-  };
-}
-
 class FakeAuthProvider implements AuthProvider {
   restoreResult: AuthSession | null = null;
   callbackResult: AuthSession | null = null;
@@ -57,7 +46,13 @@ class FakeAuthProvider implements AuthProvider {
   postLoginReturnUrl: string | null = null;
   refreshResult: AuthSession | null = null;
   refreshCalls = 0;
-  tokenChangeListeners: Array<() => void> = [];
+  initializeCalls = 0;
+  initializeError: Error | null = null;
+
+  async initialize(): Promise<void> {
+    this.initializeCalls++;
+    if (this.initializeError) throw this.initializeError;
+  }
 
   async login(returnUrl?: string): Promise<void> {
     this.loginCalls.push(returnUrl);
@@ -99,22 +94,19 @@ class FakeAuthProvider implements AuthProvider {
     this.refreshCalls++;
     return this.refreshResult;
   }
-
-  subscribeToTokenChanges(listener: () => void): void {
-    this.tokenChangeListeners.push(listener);
-  }
-
-  emitTokenChange(): void {
-    this.tokenChangeListeners.forEach(listener => listener());
-  }
 }
 
 describe('AuthService', () => {
   let provider: FakeAuthProvider;
+  let events: Subject<OAuthEvent>;
 
   function createService(): AuthService {
     TestBed.configureTestingModule({
-      providers: [AuthService, { provide: AUTH_PROVIDER, useValue: provider }],
+      providers: [
+        AuthService,
+        { provide: AUTH_PROVIDER, useValue: provider },
+        { provide: OAuthService, useValue: { events } },
+      ],
     });
     return TestBed.inject(AuthService);
   }
@@ -122,6 +114,7 @@ describe('AuthService', () => {
   beforeEach(() => {
     localStorage.clear();
     provider = new FakeAuthProvider();
+    events = new Subject<OAuthEvent>();
   });
 
   afterEach(() => {
@@ -140,7 +133,8 @@ describe('AuthService', () => {
       expect(provider.restoreCalls).toBe(0);
       expect(service.isAuthenticated()).toBe(true);
       expect(service.user()?.username).toBe('participant');
-      expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(provider.callbackResult));
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+      expect(provider.initializeCalls).toBe(1);
     });
 
     it('falls back to provider restore when callback has no session', async () => {
@@ -166,9 +160,23 @@ describe('AuthService', () => {
     });
   });
 
+  it('does not start login when discovery failed', async () => {
+    provider.initializeError = new Error('discovery failed');
+    const service = createService();
+    await service.initialize();
+    expect(service.consumeInitializationError()).toBe('discovery failed');
+    await expectAsync(service.login()).toBeRejectedWithError(
+      'Authentication has not been configured.',
+    );
+    expect(provider.loginCalls).toEqual([]);
+  });
+
   describe('token refresh propagation', () => {
     it('re-syncs the session token when the provider signals a token change', async () => {
-      const refreshed = participantSession({ token: 'fresh-token', expiresAt: Date.now() + 60_000 });
+      const refreshed = participantSession({
+        token: 'fresh-token',
+        expiresAt: Date.now() + 60_000,
+      });
       provider.restoreResult = participantSession({ token: 'stale-token' });
       provider.refreshResult = refreshed;
       const service = createService();
@@ -176,12 +184,29 @@ describe('AuthService', () => {
       await service.initialize();
       expect(service.session()?.token).toBe('stale-token');
 
-      provider.emitTokenChange();
-      await new Promise(resolve => setTimeout(resolve));
+      events.next(new OAuthSuccessEvent('token_received'));
+      await new Promise((resolve) => setTimeout(resolve));
 
       expect(provider.refreshCalls).toBe(1);
       expect(service.session()?.token).toBe('fresh-token');
-      expect(localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify(refreshed));
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+
+    it('does not restore a session if refresh completes after logout', async () => {
+      provider.restoreResult = participantSession();
+      let finish!: (session: AuthSession | null) => void;
+      spyOn(provider, 'refreshSession').and.returnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const service = createService();
+      await service.initialize();
+      events.next(new OAuthSuccessEvent('token_refreshed'));
+      await service.logout();
+      finish(participantSession({ token: 'late-token' }));
+      await Promise.resolve();
+      expect(service.isAuthenticated()).toBeFalse();
     });
 
     it('keeps the current session when a refresh returns no session', async () => {
@@ -190,8 +215,8 @@ describe('AuthService', () => {
       const service = createService();
 
       await service.initialize();
-      provider.emitTokenChange();
-      await new Promise(resolve => setTimeout(resolve));
+      events.next(new OAuthSuccessEvent('token_refreshed'));
+      await new Promise((resolve) => setTimeout(resolve));
 
       expect(service.session()?.token).toBe('stale-token');
       expect(service.isAuthenticated()).toBe(true);
@@ -214,6 +239,7 @@ describe('AuthService', () => {
     it('propagates login errors', async () => {
       provider.loginError = new Error('redirect start failed');
       const service = createService();
+      await service.initialize();
 
       await expectAsync(service.login('/home')).toBeRejectedWithError('redirect start failed');
       expect(service.isAuthenticated()).toBe(false);
@@ -246,103 +272,25 @@ describe('AuthService', () => {
     });
   });
 
-  describe('session restore from storage', () => {
-    it('restores a valid stored session on construction', () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(participantSession()));
+  it('ignores and removes legacy stored sessions without persisting the restored token', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(participantSession({ token: 'legacy-token' })),
+    );
+    provider.restoreResult = participantSession({ token: 'current-token' });
+    const service = createService();
+    expect(service.isAuthenticated()).toBeFalse();
+    await service.initialize();
+    expect(service.session()?.token).toBe('current-token');
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
 
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(true);
-      expect(service.role()).toBe('tenant-user');
-    });
-
-    it('ignores a session with an invalid role', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: { username: 'x', role: 'admin', displayName: 'X' } }),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-      expect(service.role()).toBeNull();
-    });
-
-    it('ignores a session with the obsolete participant role', () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(participantSession({
-        user: { ...participantSession().user, role: 'participant' as never },
-      })));
-      expect(createService().isAuthenticated()).toBe(false);
-    });
-
-    it('ignores participant session without participantContextId', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: { username: 'participant', role: 'tenant-user' }, token: 'x' }),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('ignores participant session without participantEdcConfig', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          user: {
-            username: 'participant',
-            role: 'tenant-admin',
-            participantContextId: 'pcx-123',
-          },
-          token: 'x',
-        }),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('ignores operator session without operatorId', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: { username: 'operator', role: 'operator' }, token: 'x' }),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('ignores an expired session', () => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(participantSession({ expiresAt: Date.now() - 1000 })),
-      );
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('ignores malformed JSON in storage', () => {
-      localStorage.setItem(STORAGE_KEY, '{ not valid json');
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(false);
-    });
-
-    it('restores a valid operator session on construction', () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(operatorSession()));
-
-      const service = createService();
-
-      expect(service.isAuthenticated()).toBe(true);
-      expect(service.role()).toBe('operator');
-      expect(service.user()?.operatorId).toBe('opr-001');
-    });
+  it('coalesces concurrent initializations and configures the provider once', async () => {
+    const service = createService();
+    await Promise.all([service.initialize(), service.initialize()]);
+    await service.initialize();
+    expect(provider.initializeCalls).toBe(1);
+    expect(provider.callbackCalls).toBe(1);
   });
 
   describe('post-login redirect URL', () => {

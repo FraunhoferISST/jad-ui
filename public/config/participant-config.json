@@ -1,4 +1,7 @@
 {
+  "did": {
+    "scheme": "http"
+  },
   "upload": {
     "maxFileSize": 10485760,
     "allowedFileTypes": []

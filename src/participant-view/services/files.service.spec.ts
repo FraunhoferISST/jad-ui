@@ -41,7 +41,7 @@ describe('FilesService owned file metadata', () => {
     });
   });
 
-  for (const method of ['getOwnedFiles', 'getFilesForFilesView'] as const) {
+  for (const method of ['getFilesForFilesView'] as const) {
     it(`retains the uploaded contract definition in ${method}`, async () => {
       const files = await TestBed.inject(FilesService)[method]();
       expect(files.find((file) => file.id === 'linked')).toEqual(

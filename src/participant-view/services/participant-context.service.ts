@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { AuthService } from '../../app/auth/auth.service';
 import { isTenantRole } from '../../app/auth/auth.types';
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { RedlineService } from '../../app/redline/redline.service';
 import { ParticipantContext } from '../models/participant-context.models';
 
 @Injectable({ providedIn: 'root' })
@@ -33,11 +33,6 @@ export class ParticipantContextService {
     return this.resolvingPromise;
   }
 
-  reset(): void {
-    this.cachedContext = null;
-    this.resolvingPromise = null;
-  }
-
   private async resolveInternal(): Promise<ParticipantContext> {
     const user = this.auth.user();
     if (!user || !isTenantRole(user.role) || !user.participantEdcConfig?.did) {
@@ -46,18 +41,8 @@ export class ParticipantContextService {
 
     const participantDid = user.participantEdcConfig.did;
     const tenants = await this.redline.listTenants();
-    for (const tenant of tenants ?? []) {
-      let participants = tenant.participants ?? [];
-      if (participants.length === 0) {
-        try {
-          const detailedTenant = await this.redline.getTenant(tenant.id);
-          participants = detailedTenant.participants ?? [];
-        } catch {
-          participants = [];
-        }
-      }
-
-      for (const participant of participants) {
+    for (const tenant of tenants) {
+      for (const participant of tenant.participants ?? []) {
         if (participant.identifier === participantDid) {
           return {
             tenantId: tenant.id,

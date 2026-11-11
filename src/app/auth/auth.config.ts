@@ -1,4 +1,4 @@
-import { EnvironmentProviders, inject, provideAppInitializer, Provider } from '@angular/core';
+import { EnvironmentProviders, inject, Provider } from '@angular/core';
 import { provideOAuthClient } from 'angular-oauth2-oidc';
 import { AUTH_PROVIDER } from './auth.types';
 import { AuthService } from './auth.service';
@@ -11,9 +11,11 @@ import { KeycloakAuthProvider } from './providers/keycloak-auth.provider';
 export function provideAuth(): (Provider | EnvironmentProviders)[] {
   return [
     provideOAuthClient(),
-    ...provideKeycloakAuthConfig(),
     KeycloakAuthProvider,
     { provide: AUTH_PROVIDER, useExisting: KeycloakAuthProvider },
-    provideAppInitializer(() => inject(AuthService).initialize()),
+    provideKeycloakAuthConfig(undefined, () => {
+      const auth = inject(AuthService);
+      return () => auth.initialize();
+    }),
   ];
 }

@@ -32,6 +32,9 @@ spec:
               value: http://redline.edc-v.svc:8081
             - name: REDLINE_POLL_INTERVAL
               value: "60"
+            # Local development uses HTTP; use HTTPS where DID documents support TLS.
+            - name: DID_SCHEME
+              value: http
             - name: JWTLET_MANAGEMENT_URL
               value: http://jwtlet.edc-v.svc:8081
             - name: JWTLET_TOKEN_EXCHANGE_URL
@@ -66,8 +69,6 @@ spec:
               value: http://siglet.edc-v.svc:8081
             - name: EDC_PROXY_BASE_URL
               value: http://edc-proxy.localhost/proxy
-            - name: JAD_BASE_URL
-              value: http://jad.localhost
           volumeMounts:
             - name: agent-config
               mountPath: /app

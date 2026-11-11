@@ -2,9 +2,9 @@ import { fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing
 import { ActivatedRoute } from '@angular/router';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
 
-import { TenantRegistration } from '../models/redline.models';
-import { REDLINE_CONFIG } from '../redline.config';
-import { RedlineService } from '../services/redline.service';
+import { TenantRegistration } from '../../app/redline/redline.models';
+import { REDLINE_CONFIG } from '../../app/redline/redline.config';
+import { RedlineService } from '../../app/redline/redline.service';
 import { TenantFormComponent } from './tenant-form/tenant-form.component';
 import { TenantViewComponent } from './tenant-view.component';
 
@@ -22,7 +22,6 @@ describe('TenantViewComponent seeded provider', () => {
       'registerTenant',
       'deployParticipant',
       'getParticipant',
-      'registerDataPlane',
     ]);
     redline.listTenants.and.resolveTo([tenant]);
     redline.getDataspaces.and.resolveTo([{ id: 2, name: 'Demo dataspace' }]);
@@ -32,7 +31,6 @@ describe('TenantViewComponent seeded provider', () => {
       ...participant,
       agents: [{ id: 3, type: 'connector', state: 'ACTIVE' }],
     });
-    redline.registerDataPlane.and.resolveTo();
     modal = jasmine.createSpyObj<ModalAndAlertService>('ModalAndAlertService', [
       'openModal',
       'closeModal',
@@ -52,13 +50,11 @@ describe('TenantViewComponent seeded provider', () => {
 
   afterEach(() => component.ngOnDestroy());
 
-  it('loads tenants immediately and refreshes without a provider selection', async () => {
+  it('loads tenants immediately without a provider selection', async () => {
     await component.ngOnInit();
     expect(redline.listTenants).toHaveBeenCalledOnceWith();
     expect(component.tenants()).toEqual([tenant]);
     expect(component.fetched()).toBeTrue();
-    await component.refreshTenants();
-    expect(redline.listTenants).toHaveBeenCalledTimes(2);
   });
 
   it('shows tenant registration but no provider selector or creation button', async () => {
@@ -88,6 +84,24 @@ describe('TenantViewComponent seeded provider', () => {
     expect(redline.listTenants).toHaveBeenCalledOnceWith();
   }));
 
+  it('cancels outstanding polls on destroy and ignores late responses', fakeAsync(() => {
+    let resolve!: (value: typeof participant) => void;
+    redline.getParticipant.and.returnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    component.deployParticipant(tenant, participant);
+    flushMicrotasks();
+    tick(500);
+    expect(redline.getParticipant).toHaveBeenCalledOnceWith(7, 9);
+    component.ngOnDestroy();
+    resolve({ ...participant, identifier: 'late' });
+    flushMicrotasks();
+    expect(component.tenants()).toEqual([tenant]);
+    expect(component.pollingParticipantIds().size).toBe(0);
+  }));
+
   it('deploys and polls a participant without a provider argument', fakeAsync(() => {
     component.deployParticipant(tenant, participant);
     flushMicrotasks();
@@ -100,9 +114,4 @@ describe('TenantViewComponent seeded provider', () => {
     expect(redline.getParticipant).toHaveBeenCalledOnceWith(7, 9);
     expect(component.pollingParticipantIds().has(9)).toBeFalse();
   }));
-
-  it('registers a participant data plane without a provider argument', async () => {
-    await component.registerDataPlane(tenant, participant);
-    expect(redline.registerDataPlane).toHaveBeenCalledOnceWith(7, 9);
-  });
 });

@@ -3,7 +3,9 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import document from '../../../ops/jad-profile-seed/jad-profile.json';
-import { POLICY_SCHEMA_URL, PolicyBuilderService } from './policy-builder.service';
+import { PolicyBuilderService } from './policy-builder.service';
+
+const POLICY_SCHEMA_URL = 'config/jad-profile.json';
 import { PolicySchema } from './policy-schema';
 
 describe('PolicyBuilderService', () => {

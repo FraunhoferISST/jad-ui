@@ -1,12 +1,5 @@
-import {
-  EnvironmentProviders,
-  inject,
-  InjectionToken,
-  provideAppInitializer,
-  Provider,
-} from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { EnvironmentProviders, InjectionToken } from '@angular/core';
+import { isConfigObject, provideRuntimeConfig } from '../runtime-config';
 
 export interface KeycloakAuthRuntimeConfig {
   issuer: string;
@@ -30,53 +23,36 @@ const DEFAULT_AUTH_CONFIG: KeycloakAuthRuntimeConfig = {
 
 export const KEYCLOAK_AUTH_CONFIG = new InjectionToken<KeycloakAuthRuntimeConfig>(
   'KEYCLOAK_AUTH_CONFIG',
-  {
-    factory: () => ({ ...DEFAULT_AUTH_CONFIG }),
-  },
+  { factory: () => ({ ...DEFAULT_AUTH_CONFIG }) },
 );
 
 export function provideKeycloakAuthConfig(
   configUrl = 'config/auth-config.json',
-): (Provider | EnvironmentProviders)[] {
-  return [
-    {
-      provide: KEYCLOAK_AUTH_CONFIG,
-      useFactory: () => ({ ...DEFAULT_AUTH_CONFIG }),
-    },
-    provideAppInitializer(async () => {
-      const http = inject(HttpClient);
-      const config = inject(KEYCLOAK_AUTH_CONFIG);
-
-      try {
-        const loaded = await firstValueFrom(http.get<Partial<KeycloakAuthRuntimeConfig>>(configUrl));
-        if (!loaded) {
-          return;
-        }
-
-        if (loaded.issuer) {
-          config.issuer = loaded.issuer;
-        }
-        if (loaded.clientId) {
-          config.clientId = loaded.clientId;
-        }
-        if (loaded.scope) {
-          config.scope = loaded.scope;
-        }
-        if (loaded.redirectUri) {
-          config.redirectUri = loaded.redirectUri;
-        }
-        if (loaded.postLogoutRedirectUri) {
-          config.postLogoutRedirectUri = loaded.postLogoutRedirectUri;
-        }
-        if (typeof loaded.strictDiscoveryDocumentValidation === 'boolean') {
-          config.strictDiscoveryDocumentValidation = loaded.strictDiscoveryDocumentValidation;
-        }
-        if (loaded.requireHttps === true || loaded.requireHttps === false || loaded.requireHttps === 'remoteOnly') {
-          config.requireHttps = loaded.requireHttps;
-        }
-      } catch {
-        // Keep defaults when the config file is missing or invalid.
+  afterLoad?: () => () => Promise<void>,
+): EnvironmentProviders {
+  return provideRuntimeConfig(
+    KEYCLOAK_AUTH_CONFIG,
+    configUrl,
+    (config, loaded) => {
+      if (!isConfigObject(loaded)) return;
+      for (const key of [
+        'issuer',
+        'clientId',
+        'scope',
+        'redirectUri',
+        'postLogoutRedirectUri',
+      ] as const) {
+        const value = loaded[key];
+        if (typeof value === 'string' && value) config[key] = value;
       }
-    }),
-  ];
+      if (typeof loaded['strictDiscoveryDocumentValidation'] === 'boolean') {
+        config.strictDiscoveryDocumentValidation = loaded['strictDiscoveryDocumentValidation'];
+      }
+      const requireHttps = loaded['requireHttps'];
+      if (typeof requireHttps === 'boolean' || requireHttps === 'remoteOnly') {
+        config.requireHttps = requireHttps;
+      }
+    },
+    afterLoad,
+  );
 }

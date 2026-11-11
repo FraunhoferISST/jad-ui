@@ -55,7 +55,10 @@ describe('TransferService download', () => {
     });
     service = TestBed.inject(TransferService);
     http = TestBed.inject(HttpTestingController);
-    spyOn(service, 'requestTransfer').and.resolveTo('transfer-id');
+    spyOn(
+      service as unknown as { requestTransfer(): Promise<string> },
+      'requestTransfer',
+    ).and.resolveTo('transfer-id');
     spyOn(URL, 'createObjectURL').and.returnValue('blob:test-download');
     spyOn(URL, 'revokeObjectURL');
     click = spyOn(HTMLAnchorElement.prototype, 'click');

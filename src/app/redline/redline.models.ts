@@ -57,8 +57,9 @@ export interface DataspaceInfo {
 /** A virtual agent of a participant (e.g. a connector) and its current state. */
 export interface VirtualParticipantAgent {
   id: number;
-  type: string;
-  state: string;
+  /** The backend schema does not require either field. */
+  type?: string;
+  state?: string;
 }
 
 /** A participant profile belonging to a tenant. */
@@ -84,6 +85,13 @@ export interface Tenant {
  */
 export interface TenantRegistration {
   tenantName: string;
+  properties?: Record<string, unknown>;
+}
+
+/** A partner reference, used for both responses and creation requests. */
+export interface PartnerReference {
+  identifier: string;
+  nickname?: string;
   properties?: Record<string, unknown>;
 }
 

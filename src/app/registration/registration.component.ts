@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { RedlineService } from '../redline/redline.service';
 
 /**
  * Public tenant-registration request form, rendered outside the dashboard shell.
@@ -10,7 +10,6 @@ import { RedlineService } from '../../operator-view/services/redline.service';
  */
 @Component({
   selector: 'app-registration',
-  standalone: true,
   imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './registration.component.html',
 })

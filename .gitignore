@@ -8,6 +8,9 @@
 
 # Node
 /node_modules
+.env
+__pycache__/
+*.pyc
 npm-debug.log
 yarn-error.log
 

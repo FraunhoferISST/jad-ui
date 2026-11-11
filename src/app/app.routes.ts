@@ -77,13 +77,17 @@ export const routes: Routes = [
       },
       {
         path: 'files',
-        loadChildren: () =>
-          import('../participant-view/files/files.routes').then((m) => m.FILES_ROUTES),
+        loadComponent: () =>
+          import('../participant-view/files/files-list/files-list.component').then(
+            (m) => m.FilesListComponent,
+          ),
       },
       {
         path: 'explore',
-        loadChildren: () =>
-          import('../participant-view/explore/explore.routes').then((m) => m.EXPLORE_ROUTES),
+        loadComponent: () =>
+          import('../participant-view/explore/explore-list/explore-list.component').then(
+            (m) => m.ExploreListComponent,
+          ),
       },
       {
         path: 'dataspaces',
@@ -95,8 +99,10 @@ export const routes: Routes = [
       },
       {
         path: 'partners',
-        loadChildren: () =>
-          import('../participant-view/partners/partners.routes').then((m) => m.PARTNERS_ROUTES),
+        loadComponent: () =>
+          import('../participant-view/partners/partners-list/partners-list.component').then(
+            (m) => m.PartnersListComponent,
+          ),
       },
       {
         path: 'transfer-history',

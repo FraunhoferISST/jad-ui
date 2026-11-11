@@ -1,0 +1,95 @@
+<div class="grid gap-6 lg:grid-cols-2">
+  <section class="rounded-xl bg-base-200">
+    <div class="px-4 py-3"><h2 class="font-semibold">Agreements</h2></div>
+    <div class="overflow-x-auto rounded-b-xl">
+      @if (loadingAgreements()) {
+        <div class="p-10 text-center">
+          <span
+            class="loading loading-spinner loading-lg"
+            role="status"
+            aria-label="Loading agreements"
+          ></span>
+        </div>
+      } @else {
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>Partner</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (agreements().length === 0) {
+              <tr>
+                <td colspan="3" class="text-center text-base-content/70">
+                  No agreements available.
+                </td>
+              </tr>
+            } @else {
+              @for (agreement of agreements(); track agreement.id) {
+                <tr>
+                  <td>{{ agreementPartnerName(agreement) }}</td>
+                  <td><span class="badge badge-success badge-sm">Active</span></td>
+                  <td>
+                    {{ agreement.contractSigningDate * 1000 | date: DATE_FORMATS.dateWithTime }}
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </section>
+  <section class="rounded-xl bg-base-200">
+    <div class="px-4 py-3"><h2 class="font-semibold">Transfer history</h2></div>
+    <div class="overflow-x-auto rounded-b-xl">
+      @if (loadingTransferHistory()) {
+        <div class="p-10 text-center">
+          <span
+            class="loading loading-spinner loading-lg"
+            role="status"
+            aria-label="Loading transfer history"
+          ></span>
+        </div>
+      } @else {
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Partner</th>
+              <th>Type</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (transactions().length === 0) {
+              <tr>
+                <td colspan="4" class="text-center text-base-content/70">
+                  No transfer history available.
+                </td>
+              </tr>
+            } @else {
+              @for (transaction of transactions(); track transaction.id) {
+                <tr>
+                  <td>{{ (transaction.timestamp | date: DATE_FORMATS.dateWithTime) ?? 'N/A' }}</td>
+                  <td>{{ transaction.partnerName || transaction.partnerId || 'N/A' }}</td>
+                  <td>{{ transaction.type | titlecase }}</td>
+                  <td>
+                    <span
+                      class="badge"
+                      [class.badge-success]="transaction.status === 'success'"
+                      [class.badge-error]="transaction.status === 'failed'"
+                      >{{ transaction.status | titlecase }}</span
+                    >
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+  </section>
+</div>

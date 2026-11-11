@@ -25,7 +25,7 @@ export class PolicyBuilderComponent {
   readonly error = signal('');
   readonly createdName = signal('');
   readonly createdRequest = signal('');
-  readonly definitions = computed(() => this.schema()?.definitions('usage') ?? []);
+  readonly definitions = computed(() => this.schema()?.usageDefinitions ?? []);
   readonly nameModel = signal({ name: '' });
   readonly fields = form(this.nameModel, (path) => {
     required(path.name, { message: 'Enter a policy name.' });
@@ -63,7 +63,7 @@ export class PolicyBuilderComponent {
       // Keep the base permission. Omit empty optional categories, especially prohibition:
       // an unconditional prohibition would deny use before the user configured anything.
       const rules = this.rules().filter(
-        (rule) => rule.kind === 'permission' || rule.constraints.length || rule.duties.length,
+        (rule) => rule.kind === 'permission' || rule.constraints.length,
       );
       const request = schema.toRequest(this.nameModel().name, rules);
       return { request, errors: schema.validationErrors(request) };

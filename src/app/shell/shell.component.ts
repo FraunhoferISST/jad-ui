@@ -2,15 +2,20 @@ import { Component, effect, inject, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
-import { AppConfig, DashboardAppComponent, DashboardStateService, EdcConfig } from '@eclipse-edc/dashboard-core';
+import {
+  AppConfig,
+  DashboardAppComponent,
+  DashboardStateService,
+  EdcConfig,
+} from '@eclipse-edc/dashboard-core';
 import { AuthService } from '../auth/auth.service';
 import { isTenantRole } from '../auth/auth.types';
 import { canAccess } from '../auth/access-rules';
 import { UserMenuComponent } from './user-menu.component';
-import { REDLINE_CONFIG } from '../../operator-view/redline.config';
-import { RedlineService } from '../../operator-view/services/redline.service';
-import { V5ContractAgreementController } from '../../participant-view/edc-controllers/contract-agreements-v5.controller';
-import { PolicyCreationController } from '../../participant-view/edc-controllers/policy-creation.controller';
+import { REDLINE_CONFIG } from '../redline/redline.config';
+import { RedlineService } from '../redline/redline.service';
+import { EDC_CUSTOM_CONTROLLERS } from '../../participant-view/models/edc.model';
+import { DASHBOARD_THEMES } from './themes';
 
 /** Local-storage key the library's DashboardStateService uses to persist the
  * currently selected connector. We clear it on load so the connector is chosen
@@ -34,7 +39,6 @@ const CURRENT_CONNECTOR_KEY = 'currentConnector';
  */
 @Component({
   selector: 'app-shell',
-  standalone: true,
   imports: [DashboardAppComponent],
   templateUrl: './shell.component.html',
 })
@@ -61,11 +65,9 @@ export class ShellComponent implements OnInit {
     // captures `authorization.value` as a static string when the client is
     // built (`setCurrentEdcConfig` -> `setDashboardClient`), so the only way to
     // propagate a new token is to re-set the config.
-    this.stateService.currentEdcConfig$
-      .pipe(takeUntilDestroyed())
-      .subscribe(config => {
-        this.currentEdcConfig = config;
-      });
+    this.stateService.currentEdcConfig$.pipe(takeUntilDestroyed()).subscribe((config) => {
+      this.currentEdcConfig = config;
+    });
 
     // React to session-token changes (driven by `AuthService` re-syncing after
     // a provider token refresh) and re-apply the fresh token to the EDC client.
@@ -84,19 +86,7 @@ export class ShellComponent implements OnInit {
     });
   }
 
-  protected readonly themes = [
-    'light',
-    'dark',
-    'dim',
-    'aqua',
-    'nord',
-    'synthwave',
-    'forest',
-    'dracula',
-    'night',
-    'coffee',
-    'emerald',
-  ];
+  protected readonly themes = DASHBOARD_THEMES;
 
   protected edcConfigs?: Promise<EdcConfig[]>;
   protected appConfig?: Promise<AppConfig>;
@@ -127,7 +117,7 @@ export class ShellComponent implements OnInit {
         : this.resolveParticipantConfigs();
 
     // Assigned synchronously so the library's `ngAfterViewInit` can await it.
-    this.edcConfigs = configs$.then(configs => {
+    this.edcConfigs = configs$.then((configs) => {
       // Make the first connector of the active role the current one. With the
       // persisted connector already cleared in the constructor, this is the
       // single source of truth for the initial selection.
@@ -138,7 +128,7 @@ export class ShellComponent implements OnInit {
     });
 
     this.appConfig = firstValueFrom(this.http.get<AppConfig>('config/app-config.json')).then(
-      config => this.applyRoleMenu(config),
+      (config) => this.applyRoleMenu(config),
     );
   }
 
@@ -150,26 +140,27 @@ export class ShellComponent implements OnInit {
       throw new Error('Missing participant EDC connector configuration in authentication claims.');
     }
 
-    config.customControllers = {
-      'v5contractAgreements': V5ContractAgreementController,
-      'policyCreation': PolicyCreationController
-    }
-
-    return [this.applyBearerToken(config, this.auth.session()?.token)];
+    return [
+      this.applyBearerToken(
+        { ...config, customControllers: EDC_CUSTOM_CONTROLLERS },
+        this.auth.session()?.token,
+      ),
+    ];
   }
 
   /**
    * Applies the current bearer token to the config's authorization header and
-   * returns the same config instance, so callers can pass it straight to the
+   * returns a copy, so callers can pass it straight to the
    * library's `setCurrentEdcConfig` (which rebuilds the EDC client from it).
    */
   private applyBearerToken(config: EdcConfig, token?: string): EdcConfig {
-    this.stateService
-    config.authorization = {
-      key: config.authorization?.key ?? 'Authorization',
-      value: `Bearer ${token ?? ''}`,
+    return {
+      ...config,
+      authorization: {
+        key: config.authorization?.key ?? 'Authorization',
+        value: `Bearer ${token ?? ''}`,
+      },
     };
-    return config;
   }
 
   /**
@@ -199,8 +190,8 @@ export class ShellComponent implements OnInit {
     const role = this.auth.role();
 
     const items = (config.menuItems ?? [])
-      .filter(item => canAccess(item.routerPath, role))
-      .map(item => ({ ...item }));
+      .filter((item) => canAccess(item.routerPath, role))
+      .map((item) => ({ ...item }));
 
     // Operators see the dedicated "JAD Operator" title; everyone else keeps the
     // title from the shared config (or the library default).

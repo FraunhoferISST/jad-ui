@@ -5,19 +5,20 @@
       <div>
         <h2 class="card-title break-all">
           <span class="material-symbols-rounded text-primary">groups</span>
-          {{ tenant.name }}
+          {{ tenant().name }}
         </h2>
-        <p class="text-xs opacity-60">Tenant #{{ tenant.id }}</p>
+        <p class="text-xs opacity-60">Tenant #{{ tenant().id }}</p>
       </div>
       <div class="flex flex-col items-end gap-1 shrink-0">
-        @if (canDeploy) {
-          @for (participant of tenant.participants; track participant.id) {
+        @if (canDeploy()) {
+          @for (participant of tenant().participants; track participant.id) {
             @if (!allAgentsActive(participant)) {
               <button
                 type="button"
                 class="btn btn-sm btn-primary btn-soft"
                 [disabled]="isPolling(participant)"
-                (click)="deploy.emit(participant)">
+                (click)="deploy.emit(participant)"
+              >
                 @if (isPolling(participant)) {
                   <span class="loading loading-bars loading-sm"></span>
                 } @else {
@@ -32,8 +33,8 @@
     </div>
 
     <!-- Participants -->
-    @if (tenant.participants?.length) {
-      @for (participant of tenant.participants; track participant.id) {
+    @if (tenant().participants?.length) {
+      @for (participant of tenant().participants; track participant.id) {
         <div class="rounded-box bg-base-100 p-3 flex flex-col gap-3">
           <div>
             <p class="font-bold break-all">{{ participant.identifier }}</p>

@@ -1,7 +1,7 @@
-/* You can add global styles to this file, and also import other style files */
 @import 'tailwindcss';
 @import 'material-symbols/rounded.css';
 @source '../node_modules/@eclipse-edc/dashboard-core/';
+/* Keep these theme names aligned with src/app/shell/themes.ts. */
 @plugin 'daisyui' {
   themes:
     light,

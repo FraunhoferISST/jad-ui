@@ -1,27 +1,24 @@
-import { CommonModule, DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { DatePipe, TitleCasePipe } from '@angular/common';
+import { Component, computed, inject, signal } from '@angular/core';
 import {
   FilterInputComponent,
   ItemCountSelectorComponent,
   ModalAndAlertService,
   PaginationComponent,
 } from '@eclipse-edc/dashboard-core';
-
 import { FileAsset } from '../../models/file-asset.model';
-import { FileSharingApiService } from '../../services/file-sharing-api.service';
+import { FileDownloadService } from '../../services/file-download.service';
 import { FilesService } from '../../services/files.service';
-import { TransferService } from '../../services/transfer.service';
 import { FileDetailComponent } from '../file-detail/file-detail.component';
 import { FileUploadComponent } from '../file-upload/file-upload.component';
 import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
+import { showError } from '../../../app/utils/show-error';
 
 @Component({
-  selector: 'participant-files-list',
-  standalone: true,
+  selector: 'app-participant-files-list',
   imports: [
-    CommonModule,
     DatePipe,
+    TitleCasePipe,
     FilterInputComponent,
     ItemCountSelectorComponent,
     PaginationComponent,
@@ -29,50 +26,48 @@ import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
   templateUrl: './files-list.component.html',
 })
 export class FilesListComponent {
-  private readonly router = inject(Router);
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly fileSharing = inject(FileSharingApiService);
+  private readonly downloads = inject(FileDownloadService);
   private readonly filesService = inject(FilesService);
-  private readonly transferService = inject(TransferService);
 
-  files: FileAsset[] = [];
-  filteredFiles: FileAsset[] = [];
-  pageFiles: FileAsset[] = [];
-
+  readonly files = signal<FileAsset[]>([]);
+  readonly pageFiles = signal<FileAsset[]>([]);
+  readonly loading = signal(true);
+  readonly pageItemCount = signal(10);
+  readonly searchText = signal('');
+  readonly downloadingId = signal<string | null>(null);
   readonly DATE_FORMATS = DATE_FORMATS;
   readonly formatFileSize = formatFileSize;
-
-  loading = true;
-  pageItemCount = 10;
-  searchText = '';
-  downloadingId: string | null = null;
+  readonly filteredFiles = computed(() => {
+    const query = this.searchText();
+    return this.files().filter(
+      (file) =>
+        !query ||
+        [file.id, file.name, file.type].some((field) => field?.toLowerCase().includes(query)),
+    );
+  });
 
   constructor() {
     void this.loadData();
   }
 
   filter(searchText: string): void {
-    this.searchText = searchText.trim().toLowerCase();
-    this.applyFilters();
+    this.searchText.set(searchText.trim().toLowerCase());
   }
-
   paginationEvent(pageItems: FileAsset[]): void {
-    this.pageFiles = pageItems;
+    this.pageFiles.set(pageItems);
   }
 
   async loadData(): Promise<void> {
-    this.loading = true;
+    this.loading.set(true);
     try {
-      const files = await this.filesService.getFilesForFilesView();
-      this.files = files;
-      this.applyFilters();
+      this.files.set(await this.filesService.getFilesForFilesView());
     } catch (error) {
-      this.showError(error, 'Failed to load files');
-      this.files = [];
-      this.filteredFiles = [];
-      this.pageFiles = [];
+      showError(this.modalAndAlert, error, 'Failed to load files');
+      this.files.set([]);
+      this.pageFiles.set([]);
     } finally {
-      this.loading = false;
+      this.loading.set(false);
     }
   }
 
@@ -97,61 +92,18 @@ export class FilesListComponent {
     );
   }
 
-  openExplore(): void {
-    void this.router.navigate(['/explore']);
-  }
-
   openDetails(file: FileAsset): void {
-    if (!file.id) {
-      return;
-    }
-    this.modalAndAlert.openModal(
-      FileDetailComponent,
-      { file },
-      undefined,
-      true,
-    );
+    this.modalAndAlert.openModal(FileDetailComponent, { file }, undefined, true);
   }
 
   async download(file: FileAsset): Promise<void> {
-    this.downloadingId = file.id;
+    this.downloadingId.set(file.id);
     try {
-      if (file.origin === 'owned') {
-        await this.fileSharing.downloadFile(file);
-      } else {
-        await this.transferService.requestTransferAndDownload(file);
-      }
-      this.modalAndAlert.showAlert(
-        `Started download for "${file.name}".`,
-        'Download',
-        'success',
-        5,
-      );
+      await this.downloads.download(file);
     } catch (error) {
-      this.showError(error, 'Download failed');
+      showError(this.modalAndAlert, error, 'Download failed');
     } finally {
-      this.downloadingId = null;
+      this.downloadingId.set(null);
     }
-  }
-
-  private applyFilters(): void {
-    let next = [...this.files];
-
-    if (this.searchText) {
-      next = next.filter(file => {
-        const fields = [file.id, file.name, file.type]
-          .filter((field): field is string => typeof field === 'string')
-          .map(field => field.toLowerCase());
-
-        return fields.some(field => field.includes(this.searchText));
-      });
-    }
-
-    this.filteredFiles = next;
-  }
-
-  private showError(error: unknown, title: string): void {
-    const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
-    this.modalAndAlert.showAlert(message, title, 'error', 8);
   }
 }

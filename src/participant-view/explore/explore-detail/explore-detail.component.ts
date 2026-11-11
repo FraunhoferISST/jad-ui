@@ -1,117 +1,61 @@
-import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
-import { Component, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { TitleCasePipe } from '@angular/common';
+import { Component, computed, inject, input, OnInit, signal, viewChild } from '@angular/core';
 import { ModalAndAlertService } from '@eclipse-edc/dashboard-core';
-
+import { ContractAgreement } from '@think-it-labs/edc-connector-client';
+import { FileActivityComponent } from '../../file-activity/file-activity.component';
 import { FileAsset } from '../../models/file-asset.model';
 import { CatalogService } from '../../services/catalog.service';
-import { TransferService } from '../../services/transfer.service';
-import { DATE_FORMATS, formatFileSize } from '../../utils/format.utils';
+import { FileDownloadService } from '../../services/file-download.service';
+import { formatFileSize } from '../../utils/format.utils';
+import { showError } from '../../../app/utils/show-error';
 
 @Component({
-  selector: 'participant-explore-detail',
-  standalone: true,
-  imports: [CommonModule, DatePipe, TitleCasePipe],
+  selector: 'app-participant-explore-detail',
+  imports: [TitleCasePipe, FileActivityComponent],
   templateUrl: './explore-detail.component.html',
 })
-export class ExploreDetailComponent implements OnChanges {
+export class ExploreDetailComponent implements OnInit {
   private readonly modalAndAlert = inject(ModalAndAlertService);
-  private readonly catalogService = inject(CatalogService);
-  private readonly transferService = inject(TransferService);
+  private readonly catalog = inject(CatalogService);
+  private readonly downloads = inject(FileDownloadService);
+  private readonly activity = viewChild.required(FileActivityComponent);
 
-  @Input({ required: true }) file!: FileAsset;
-
-  readonly DATE_FORMATS = DATE_FORMATS;
+  readonly file = input.required<FileAsset>();
   readonly formatFileSize = formatFileSize;
+  readonly requestingAccess = signal(false);
+  readonly requestingTransfer = signal(false);
+  private readonly agreementCount = signal(0);
+  readonly hasAccess = computed(() => this.agreementCount() > 0);
 
-  loadingAgreements = true;
-  loadingTransferHistory = true;
-  requestingAccess = false;
-  requestingTransfer = false;
-
-  hasAccess(): boolean {
-    return (this.file.agreements?.length ?? 0) > 0;
+  ngOnInit(): void {
+    this.agreementCount.set(this.file().agreements?.length ?? 0);
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['file']) {
-      this.loadingAgreements = true;
-      this.loadingTransferHistory = true;
-      void this.loadDetails();
-    }
-  }
-
-  agreementPartnerName(
-    file: FileAsset,
-    agreement: { providerId: string; consumerId: string },
-  ): string {
-    return file.partnerName || agreement.providerId || 'N/A';
-  }
-
-  agreementDate(epochSeconds: number): number {
-    return epochSeconds * 1000;
+  onAgreementsLoaded(agreements: ContractAgreement[]): void {
+    this.agreementCount.set(agreements.length);
   }
 
   async requestAccess(): Promise<void> {
-    this.requestingAccess = true;
+    this.requestingAccess.set(true);
     try {
-      await this.catalogService.requestAccess(this.file);
+      await this.catalog.requestAccess(this.file());
       this.modalAndAlert.showAlert('Access granted successfully.', 'Access request', 'success', 5);
-      this.loadingAgreements = true;
-      await this.loadAgreements();
+      await this.activity().reloadAgreements();
     } catch (error) {
-      this.showError(error, 'Access request failed');
+      showError(this.modalAndAlert, error, 'Access request failed');
     } finally {
-      this.requestingAccess = false;
+      this.requestingAccess.set(false);
     }
   }
 
   async download(): Promise<void> {
-    this.requestingTransfer = true;
+    this.requestingTransfer.set(true);
     try {
-      await this.transferService.requestTransferAndDownload(this.file);
-      this.modalAndAlert.showAlert(
-        `Started download for "${this.file.name}".`,
-        'Download',
-        'success',
-        5,
-      );
+      await this.downloads.download(this.file());
     } catch (error) {
-      this.showError(error, 'Download failed');
+      showError(this.modalAndAlert, error, 'Download failed');
     } finally {
-      this.requestingTransfer = false;
+      this.requestingTransfer.set(false);
     }
-  }
-
-  private async loadDetails(): Promise<void> {
-    // History is matched by agreement id; wait for the agreement entities first.
-    await this.loadAgreements();
-    await this.loadTransferHistory();
-  }
-
-  private async loadAgreements(): Promise<void> {
-    try {
-      this.file.agreements = await this.catalogService.getAgreementsForFile(this.file);
-    } catch (error) {
-      this.showError(error, 'Failed to load agreements');
-      this.file.agreements = [];
-    } finally {
-      this.loadingAgreements = false;
-    }
-  }
-
-  private async loadTransferHistory(): Promise<void> {
-    try {
-      this.file.transactionHistory = await this.transferService.getFileTransferHistory(this.file);
-    } catch (error) {
-      this.showError(error, 'Failed to load transfer history');
-      this.file.transactionHistory = [];
-    } finally {
-      this.loadingTransferHistory = false;
-    }
-  }
-
-  private showError(error: unknown, title: string): void {
-    const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
-    this.modalAndAlert.showAlert(message, title, 'error', 8);
   }
 }

@@ -1,5 +1,7 @@
 import document from '../../../ops/jad-profile-seed/jad-profile.json';
-import { AtomicBlock, POLICY_PURPOSE_PROPERTY, PolicySchema, SchemaNode } from './policy-schema';
+import { BuildingBlock, PolicySchema, SchemaNode } from './policy-schema';
+
+type AtomicBlock = Extract<BuildingBlock, { kind: 'atomic' }>;
 
 function testPolicySchema(): PolicySchema {
   return new PolicySchema(structuredClone(document) as SchemaNode);
@@ -42,9 +44,9 @@ describe('PolicySchema', () => {
     ]);
   });
 
-  it('restricts inForceDate to permissions, including attached duties and logical groups', () => {
+  it('restricts inForceDate to permissions, including logical groups', () => {
     expect(schema.rules[0].blocks.some((block) => block.id === 'inForceDate')).toBeTrue();
-    for (const rule of [...schema.rules.slice(1), schema.rules[0].duty!]) {
+    for (const rule of schema.rules.slice(1)) {
       expect(rule.blocks.some((block) => block.id === 'inForceDate')).toBeFalse();
       const draft = schema.createRule(rule);
       const group = schema.createConstraint(rule.blocks.find((block) => block.id === 'group:and')!);
@@ -128,17 +130,13 @@ describe('PolicySchema', () => {
     expect(schema.validationErrors(schema.toRequest('test', [rule]))).toEqual([]);
   });
 
-  it('serializes duties and strips editor-only labels and IDs', () => {
+  it('strips editor-only IDs when serializing', () => {
     const definition = schema.rules[0];
-    const rule = schema.createRule(definition, 'Editor label');
-    const duty = schema.createRule(definition.duty!, 'Editor duty');
-    duty.constraints.push(schema.createConstraint(testAtomic(schema, 'ManufacturerCredential')));
-    rule.duties.push(duty);
+    const rule = schema.createRule(definition);
     const request = schema.toRequest('  Named policy  ', [rule]);
     expect(request['@id']).toBe('Named policy');
     expect(request['@type']).toBe('PolicyDefinition');
     expect(Object.keys(request)).toEqual(['@context', '@type', '@id', 'policy']);
-    expect(JSON.stringify(request)).not.toContain('Editor');
     expect(JSON.stringify(request)).not.toContain(rule.id);
     expect(request.policy['prohibition']).toBeUndefined();
     expect(schema.validationErrors(request)).toEqual([]);
@@ -205,37 +203,16 @@ describe('PolicySchema', () => {
     expect(block.operators).toEqual(['http://www.w3.org/ns/odrl/2/eq']);
   });
 
-  it('derives the access palette from evaluation-scope annotations, not operand names', () => {
-    const definition = schema.definitions('access')[0];
-    expect(schema.definitions('access').map((rule) => rule.kind)).toEqual(['permission']);
-    expect(definition.duty).toBeUndefined();
-    expect(definition.blocks.map((block) => block.id)).toContain('CounterPartyId');
-    expect(definition.blocks.map((block) => block.id)).not.toContain('inForceDate');
-    expect(schema.definitions('usage')[0].blocks.map((block) => block.id)).toContain('inForceDate');
-    const changed = structuredClone(document) as SchemaNode;
-    const defs = changed['$defs'] as Record<string, SchemaNode>;
-    defs['InForceDateConstraint']['x-jad-evaluation-scopes'] = ['catalog'];
-    const adapted = new PolicySchema(changed);
-    expect(adapted.definitions('access')[0].blocks.map((block) => block.id)).toContain(
-      'inForceDate',
-    );
+  it('orders the supported usage rule categories for the editor', () => {
+    expect(schema.usageDefinitions.map((rule) => rule.kind)).toEqual([
+      'permission',
+      'obligation',
+      'prohibition',
+    ]);
   });
 
-  it('persists purpose as private metadata while keeping both modes schema-valid use policies', () => {
-    for (const purpose of ['access', 'usage'] as const) {
-      const definition = schema.definitions(purpose)[0];
-      const request = schema.toRequest('Named policy', [schema.createRule(definition)], purpose);
-      expect(request.privateProperties?.[POLICY_PURPOSE_PROPERTY]).toBe(purpose);
-      expect(request.policy['permission']).toEqual([{ action: 'use' }]);
-      expect(schema.validationErrors(request)).toEqual([]);
-    }
-    expect(() =>
-      schema.toRequest('test', [schema.createRule(schema.rules[1])], 'access'),
-    ).toThrowError(/only support permissions/);
-  });
-
-  it('validates popup drafts before committing, including nested access restrictions', () => {
-    const definition = schema.definitions('access')[0];
+  it('validates drafts before committing, including nested category restrictions', () => {
+    const definition = schema.rules.find((rule) => rule.kind === 'obligation')!;
     const counterparty = schema.createConstraint(
       definition.blocks.find((block) => block.id === 'CounterPartyId')!,
     );
@@ -256,7 +233,7 @@ describe('PolicySchema', () => {
     expect(schema.constraintErrors(group, definition).join(' ')).toContain('not allowed');
     const requestRule = schema.createRule(definition);
     requestRule.constraints.push(group);
-    expect(() => schema.toRequest('test', [requestRule], 'access')).toThrowError(/not allowed/);
+    expect(() => schema.toRequest('test', [requestRule])).toThrowError(/not allowed/);
   });
 
   it('creates compact summaries without dropping stored descriptions or list values', () => {

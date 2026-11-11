@@ -18,7 +18,7 @@
       "text": "Partners",
       "materialSymbol": "groups",
       "routerPath": "partners",
-      "viewDescription": "The partners view lets participants manage partner references for their dataspace, add new partners from registered participants, and inspect the currently configured partner list."
+      "viewDescription": "The partners view lets participants manage partner references per joined dataspace: add registered participants or unregistered identifiers to a chosen dataspace and inspect the partners stored for each dataspace."
     },
     {
       "text": "Policy Builder",
@@ -62,8 +62,7 @@
       "text": "Contract Definitions",
       "materialSymbol": "contract_edit",
       "routerPath": "contract-definitions",
-      "viewDescription": "The contract definitions view allows you to create, edit and delete contract definitions. Contract definitions link assets and policies by declaring which policies apply to a set of assets. Contract definitions contain two types of policies: an access policy (who can see or discover the data contract offer) and a contract policy (the actual terms and conditions of data use once a contract has been agreed upon).",
-      "divider": false
+      "viewDescription": "The contract definitions view allows you to create, edit and delete contract definitions. Contract definitions link assets and policies by declaring which policies apply to a set of assets. Contract definitions contain two types of policies: an access policy (who can see or discover the data contract offer) and a contract policy (the actual terms and conditions of data use once a contract has been agreed upon)."
     },
     {
       "text": "Contracts",
@@ -75,8 +74,7 @@
       "text": "Transfer History",
       "materialSymbol": "schedule_send",
       "routerPath": "transfer-history",
-      "viewDescription": "The transfer history view lets you browse and deprovision finished and ongoing transfer processes. You can switch between providing and consuming transfer processes of the selected connector.",
-      "divider": false
+      "viewDescription": "The transfer history view lets you browse and deprovision finished and ongoing transfer processes. You can switch between providing and consuming transfer processes of the selected connector."
     },
     {
       "text": "Open Registrations",
@@ -88,7 +86,7 @@
       "text": "Tenants",
       "materialSymbol": "groups",
       "routerPath": "tenants",
-      "viewDescription": "The tenants view lists deployed tenants — those whose participants already have running agents. You can monitor each tenant's participants, agents and dataspace memberships, and register data planes for them."
+      "viewDescription": "The tenants view lists deployed tenants — those whose participants already have running agents. You can monitor each tenant's participants, agents and dataspace memberships."
     }
   ]
 }

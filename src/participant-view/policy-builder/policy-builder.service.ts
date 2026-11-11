@@ -5,8 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ExtendedEdcClient } from '../models/edc.model';
 import { PolicyCreateRequest, PolicySchema, SchemaNode } from './policy-schema';
 
-export const POLICY_SCHEMA_URL = 'config/jad-profile.json';
-// export const POLICY_SCHEMA_URL = 'config/cx-profile.json';
+const POLICY_SCHEMA_URL = 'config/jad-profile.json';
 
 @Injectable({ providedIn: 'root' })
 export class PolicyBuilderService {

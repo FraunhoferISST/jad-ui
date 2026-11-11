@@ -7,20 +7,22 @@ import {
   PaginationComponent,
 } from '@eclipse-edc/dashboard-core';
 
-import { RedlineService } from '../services/redline.service';
+import { RedlineService } from '../../app/redline/redline.service';
 import {
   DataspaceRequest,
   DataspaceResponse,
   Participant,
   Tenant,
   TenantRegistration,
-} from '../models/redline.models';
+} from '../../app/redline/redline.models';
 import { TenantCardComponent } from './tenant-card/tenant-card.component';
 import { DataspaceFormComponent } from './dataspace-form/dataspace-form.component';
 import { TenantFormComponent } from './tenant-form/tenant-form.component';
 import { generateParticipantDid } from '../util/did.util';
 import { isTenantDeployed } from '../util/deployment.util';
-import { REDLINE_CONFIG } from '../redline.config';
+import { REDLINE_CONFIG } from '../../app/redline/redline.config';
+import { showError } from '../../app/utils/show-error';
+import { pollUntil } from '../../app/utils/poll-until';
 
 /** Agent states that are considered terminal for deployment polling. */
 const TERMINAL_AGENT_STATES = ['ACTIVE', 'ERROR', 'FAILED', 'DISPOSED'];
@@ -32,7 +34,7 @@ const POLL_INTERVAL_MS = 500;
 const MAX_POLL_ATTEMPTS = 120;
 
 /** View mode: deployed tenants vs. open (not-yet-deployed) registrations. */
-export type TenantViewMode = 'deployed' | 'open';
+type TenantViewMode = 'deployed' | 'open';
 
 /**
  * Operator view for managing the Redline tenant hierarchy:
@@ -43,8 +45,7 @@ export type TenantViewMode = 'deployed' | 'open';
  *  - `open`: open registrations — tenants registered but not yet deployed.
  */
 @Component({
-  selector: 'tenant-view',
-  standalone: true,
+  selector: 'app-tenant-view',
   imports: [
     FilterInputComponent,
     ItemCountSelectorComponent,
@@ -63,12 +64,11 @@ export class TenantViewComponent implements OnInit, OnDestroy {
    * Which slice of tenants this instance shows, read from the route's `data`.
    * Defaults to `deployed` when not provided.
    */
-  readonly mode = signal<TenantViewMode>(
-    (this.route.snapshot.data['mode'] as TenantViewMode) ?? 'deployed',
-  );
+  readonly mode: TenantViewMode =
+    (this.route.snapshot.data['mode'] as TenantViewMode) ?? 'deployed';
 
-  /** Active deployment-status poll timers, keyed by participant ID. */
-  private readonly pollTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Active deployment-status polls, keyed by participant ID. */
+  private readonly polls = new Map<number, AbortController>();
 
   /** IDs of participants currently being polled, exposed to the cards. */
   readonly pollingParticipantIds = signal<ReadonlySet<number>>(new Set<number>());
@@ -101,7 +101,7 @@ export class TenantViewComponent implements OnInit, OnDestroy {
    * `ACTIVE`); the `open` mode keeps the rest (registered, not yet deployed).
    */
   readonly visibleTenants = computed(() => {
-    const deployedMode = this.mode() === 'deployed';
+    const deployedMode = this.mode === 'deployed';
     return this.filteredTenants().filter((tenant) => isTenantDeployed(tenant) === deployedMode);
   });
 
@@ -110,10 +110,9 @@ export class TenantViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    for (const timer of this.pollTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.pollTimers.clear();
+    for (const poll of this.polls.values()) poll.abort();
+    this.polls.clear();
+    this.pollingParticipantIds.set(new Set());
   }
 
   private async loadDataspaces(): Promise<void> {
@@ -137,10 +136,6 @@ export class TenantViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  async refreshTenants(): Promise<void> {
-    await this.loadTenants();
-  }
-
   filter(searchText: string): void {
     this.filterText.set(searchText);
   }
@@ -157,7 +152,6 @@ export class TenantViewComponent implements OnInit, OnDestroy {
       {},
       {
         save: (dataspace: DataspaceRequest) => void this.createDataspace(dataspace),
-        cancel: () => this.modalAndAlert.closeModal(),
       },
       true,
     );
@@ -180,7 +174,6 @@ export class TenantViewComponent implements OnInit, OnDestroy {
       {},
       {
         save: (registration: TenantRegistration) => void this.registerTenant(registration),
-        cancel: () => this.modalAndAlert.closeModal(),
       },
       true,
     );
@@ -233,45 +226,37 @@ export class TenantViewComponent implements OnInit, OnDestroy {
    * a terminal state ({@link TERMINAL_AGENT_STATES}) or the attempt cap is hit.
    */
   private startPollingParticipant(tenantId: number, participantId: number): void {
-    // Cancel any in-flight poll for this participant before starting a new one.
     this.stopPollingParticipant(participantId);
-
-    let attempts = 0;
-    const poll = async (): Promise<void> => {
-      attempts += 1;
-      try {
-        const participant = await this.redline.getParticipant(tenantId, participantId);
-        this.updateParticipantInTenants(tenantId, participant);
-
-        if (this.allAgentsTerminal(participant) || attempts >= MAX_POLL_ATTEMPTS) {
-          this.stopPollingParticipant(participantId);
-          return;
-        }
-      } catch (error) {
-        this.stopPollingParticipant(participantId);
-        this.showError('Failed to poll participant status', error);
-        return;
-      }
-      this.pollTimers.set(
-        participantId,
-        setTimeout(() => void poll(), POLL_INTERVAL_MS),
-      );
-    };
-
-    this.pollTimers.set(
-      participantId,
-      setTimeout(() => void poll(), POLL_INTERVAL_MS),
-    );
+    const controller = new AbortController();
+    this.polls.set(participantId, controller);
     this.markPolling(participantId, true);
+    void pollUntil(
+      async () => {
+        const participant = await this.redline.getParticipant(tenantId, participantId);
+        if (controller.signal.aborted) return undefined;
+        this.updateParticipantInTenants(tenantId, participant);
+        return this.allAgentsTerminal(participant) ? true : undefined;
+      },
+      {
+        intervalMs: POLL_INTERVAL_MS,
+        maxAttempts: MAX_POLL_ATTEMPTS,
+        initialDelay: true,
+        signal: controller.signal,
+      },
+    )
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) this.showError('Failed to poll participant status', error);
+      })
+      .finally(() => {
+        if (this.polls.get(participantId) === controller)
+          this.stopPollingParticipant(participantId);
+      });
   }
 
-  /** Stops and clears any active poll timer for the given participant. */
+  /** Stops and clears any active poll for the given participant. */
   private stopPollingParticipant(participantId: number): void {
-    const timer = this.pollTimers.get(participantId);
-    if (timer !== undefined) {
-      clearTimeout(timer);
-      this.pollTimers.delete(participantId);
-    }
+    this.polls.get(participantId)?.abort();
+    this.polls.delete(participantId);
     this.markPolling(participantId, false);
   }
 
@@ -317,22 +302,7 @@ export class TenantViewComponent implements OnInit, OnDestroy {
     this.pageTenants.update((tenants) => tenants.map(replace));
   }
 
-  async registerDataPlane(tenant: Tenant, participant: Participant): Promise<void> {
-    try {
-      await this.redline.registerDataPlane(tenant.id, participant.id);
-      this.modalAndAlert.showAlert(
-        `Data plane registered for "${participant.identifier}".`,
-        'Success',
-        'success',
-        5,
-      );
-    } catch (error) {
-      this.showError('Failed to register data plane', error);
-    }
-  }
-
   private showError(title: string, error: unknown): void {
-    const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
-    this.modalAndAlert.showAlert(message, title, 'error', 8);
+    showError(this.modalAndAlert, error, title);
   }
 }

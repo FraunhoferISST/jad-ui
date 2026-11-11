@@ -29,12 +29,6 @@ export const ACCESS_RULES: Record<string, Role[]> = {
 };
 
 /**
- * Routes that any authenticated user may access regardless of the access map
- * (e.g. the logout route). These are never filtered out.
- */
-const ROLE_AGNOSTIC_PATHS = new Set<string>(['logout']);
-
-/**
  * Returns whether the given role may access the given route path.
  *
  * - Unknown paths default to "allowed for any authenticated user" so that
@@ -45,9 +39,6 @@ const ROLE_AGNOSTIC_PATHS = new Set<string>(['logout']);
 export function canAccess(path: string, role: Role | null): boolean {
   if (role === null) {
     return false;
-  }
-  if (ROLE_AGNOSTIC_PATHS.has(path)) {
-    return true;
   }
   const allowed = ACCESS_RULES[path];
   if (!allowed) {

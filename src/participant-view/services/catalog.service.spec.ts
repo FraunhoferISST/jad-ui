@@ -1,10 +1,55 @@
 import { TestBed } from '@angular/core/testing';
 import { EdcClientService } from '@eclipse-edc/dashboard-core';
-import { ContractAgreement } from '@think-it-labs/edc-connector-client';
+import { ContractAgreement, Dataset } from '@think-it-labs/edc-connector-client';
 
 import { FileAsset } from '../models/file-asset.model';
 import { CatalogService } from './catalog.service';
+import { DidResolverService } from './did-resolver.service';
 import { PartnerService } from './partner.service';
+
+describe('CatalogService catalog mapping', () => {
+  it('uses asset IDs for files without file IDs and handles missing names and identity', async () => {
+    const named = new Dataset();
+    named.id = 'asset-a';
+    named.setValue('edc', 'name', 'First');
+    const unnamed = new Dataset();
+    unnamed.id = 'asset-b';
+    const identified = new Dataset();
+    identified.id = 'asset-c';
+    identified.setValue('edc', 'fileId', 'file-c');
+    identified.setValue('edc', 'name', 7); // Invalid values must not break string-based views.
+    const unidentified = new Dataset();
+    const request = jasmine.createSpy('request').and.resolveTo({
+      datasets: [named, unnamed, identified, unidentified],
+      participantId: 'did:web:provider',
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: EdcClientService,
+          useValue: { getClient: async () => ({ management: { catalog: { request } } }) },
+        },
+        { provide: PartnerService, useValue: {} },
+        {
+          provide: DidResolverService,
+          useValue: { resolveProtocolEndpoint: async () => 'https://provider.test/dsp' },
+        },
+      ],
+    });
+    const files = await TestBed.inject(CatalogService).getPartnerCatalog({
+      identifier: 'did:web:provider',
+    });
+    expect(files.map(({ id, name, assetId }) => ({ id, name, assetId }))).toEqual([
+      { id: 'asset-a', name: 'First', assetId: 'asset-a' },
+      { id: 'asset-b', name: 'asset-b', assetId: 'asset-b' },
+      { id: 'file-c', name: 'file-c', assetId: 'asset-c' },
+    ]);
+    expect(request).toHaveBeenCalledOnceWith({
+      counterPartyId: 'did:web:provider',
+      counterPartyAddress: 'https://provider.test/dsp',
+    });
+  });
+});
 
 describe('CatalogService file agreements', () => {
   let service: CatalogService;
@@ -36,6 +81,7 @@ describe('CatalogService file agreements', () => {
           },
         },
         { provide: PartnerService, useValue: {} },
+        { provide: DidResolverService, useValue: {} },
       ],
     });
     service = TestBed.inject(CatalogService);

@@ -6,8 +6,11 @@ import { EdcClientService } from '@eclipse-edc/dashboard-core';
 import { TransferProcess } from '@think-it-labs/edc-connector-client';
 
 import { AuthService } from '../../app/auth/auth.service';
+import { pollUntil } from '../../app/utils/poll-until';
 import { FileAsset, Transaction } from '../models/file-asset.model';
-import { resolveDidProtocolEndpoint } from '../utils/did.utils';
+import { DidResolverService } from './did-resolver.service';
+import { triggerBrowserDownload } from '../utils/browser-download';
+import { participantAuthorization } from '../utils/participant-auth';
 import { ParticipantConfigService } from './participant-config.service';
 import { PartnerService } from './partner.service';
 
@@ -24,6 +27,7 @@ interface SigletEdr {
 export class TransferService {
   private readonly edcClientService = inject(EdcClientService);
   private readonly partnerService = inject(PartnerService);
+  private readonly didResolver = inject(DidResolverService);
   private readonly participantConfig = inject(ParticipantConfigService);
   private readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
@@ -36,12 +40,12 @@ export class TransferService {
     await this.downloadFromEdr(edr, file.name);
   }
 
-  async requestTransfer(file: FileAsset): Promise<string> {
+  private async requestTransfer(file: FileAsset): Promise<string> {
     if (!file.agreements?.[0]?.['@id'] || !file.partnerDid) {
       throw new Error('Missing file data required for transfer and download.');
     }
 
-    const protocolEndpoint = await resolveDidProtocolEndpoint(file.partnerDid, false);
+    const protocolEndpoint = await this.didResolver.resolveProtocolEndpoint(file.partnerDid);
     if (!protocolEndpoint) {
       throw new Error('Could not resolve protocol endpoint for partner.');
     }
@@ -124,15 +128,10 @@ export class TransferService {
    * `{ token, endpoint }`, where `token` authenticates the data-plane request.
    */
   private async resolveEdr(transferProcessId: string): Promise<SigletEdr> {
-    const participantContextId = this.auth.user()?.participantContextId;
-    if (!participantContextId) {
-      throw new Error('Participant context id is unavailable for the transfer download.');
-    }
-
-    const token = this.auth.session()?.token;
-    if (!token) {
-      throw new Error('Authentication token is unavailable for the transfer download.');
-    }
+    const { participantContextId, headers } = participantAuthorization(
+      this.auth,
+      'the transfer download',
+    );
 
     const { baseUrl } = await this.participantConfig.getSigletConfig();
     const url = `${baseUrl.replace(/\/$/, '')}/tokens/${encodeURIComponent(
@@ -141,7 +140,7 @@ export class TransferService {
 
     const edr = await firstValueFrom(
       this.http.get<SigletEdr>(url, {
-        headers: new HttpHeaders({ Authorization: `Bearer ${token}` }),
+        headers,
       }),
     );
 
@@ -184,51 +183,25 @@ export class TransferService {
       }),
     );
 
-    this.triggerBrowserDownload(blob, filename);
-  }
-
-  private triggerBrowserDownload(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename || 'download';
-    document.body.appendChild(anchor);
-    try {
-      anchor.click();
-    } finally {
-      anchor.remove();
-      // Give the browser time to consume the object URL before releasing it.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    }
+    triggerBrowserDownload(blob, filename);
   }
 
   private async waitForTransferStarted(transferProcessId: string): Promise<TransferProcess> {
-    const maxWaitMs = 30_000;
-    const pollMs = 1_000;
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt < maxWaitMs) {
-      await this.delay(pollMs);
-      const transfer = await (
-        await this.edcClientService.getClient()
-      ).management.transferProcesses.get(transferProcessId);
-      const state = (transfer.state ?? '').toUpperCase();
-      if (state === 'STARTED') {
-        return transfer;
-      }
-      if (state === 'TERMINATED') {
-        throw new Error(
-          `Transfer process terminated: ${transfer.errorDetail || 'no reason provided'}`,
-        );
-      }
-    }
-
-    throw new Error('Transfer process timed out before reaching STARTED.');
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
+    const client = await this.edcClientService.getClient();
+    const transfer = await pollUntil(
+      async () => {
+        const result = await client.management.transferProcesses.get(transferProcessId);
+        const state = (result.state ?? '').toUpperCase();
+        if (state === 'TERMINATED') {
+          throw new Error(
+            `Transfer process terminated: ${result.errorDetail || 'no reason provided'}`,
+          );
+        }
+        return state === 'STARTED' ? result : undefined;
+      },
+      { intervalMs: 1_000, timeoutMs: 30_000, initialDelay: true },
+    );
+    if (!transfer) throw new Error('Transfer process timed out before reaching STARTED.');
+    return transfer;
   }
 }

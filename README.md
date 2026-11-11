@@ -7,7 +7,7 @@ transfers) and adds custom **operator views** for tenant onboarding and
 deployment, backed by the Redline tenant-management API.
 
 > Built with Angular 21, Tailwind CSS 4, and daisyUI. Standalone components,
-> lazy-loaded routes, and a swappable authentication provider.
+> lazy-loaded routes, and Keycloak authentication.
 
 ---
 
@@ -19,6 +19,7 @@ deployment, backed by the Redline tenant-management API.
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [Tenant dataspace membership](#tenant-dataspace-membership)
+- [Partner references](#partner-references)
 - [Policy Builder](#policy-builder)
 - [JAD policy profile seed](#jad-policy-profile-seed)
 - [Authentication & roles](#authentication--roles)
@@ -32,8 +33,15 @@ deployment, backed by the Redline tenant-management API.
 - **Tenant-admin dataspace view** — Join dataspaces, edit membership metadata, and
   leave dataspaces for the logged-in admin's tenant via Redline. Registration
   creates tenants without assigning dataspace membership.
+- **Tenant-admin partners view** — Partner references are stored per dataspace
+  membership of the logged-in participant. Add registered participants or an
+  arbitrary partner identifier (DID) with optional properties to a selected
+  dataspace; the view lists the stored partners grouped by dataspace.
 - **Tenant-user views** — Files (including uploads under an admin-created contract
-  definition) and Explore.
+  definition) and Explore. Owned-file sharing previews use the linked definition's
+  policies, not stored partner lists; EDC remains responsible for policy enforcement.
+  Agreements and transfer history are matched by asset and contract IDs, independent
+  of the current sharing preview.
 - **Operator console** — Tenants and Open Registrations views for managing
   dataspaces, tenants, and participant deployments via the Redline backend.
   All tenant operations use the seeded service provider with ID `1`; provider
@@ -78,7 +86,10 @@ deployment, backed by the Redline tenant-management API.
 - **Redline service provider** is always the seeded provider with ID `1`, for
   public registration, operator actions, participant-context lookup, dataspace
   membership and partner requests. Redline must seed this provider before use;
-  there is no configurable provider ID or fallback to another provider.
+  there is no configurable provider ID or fallback to another provider. The shared
+  client and models live in `src/app/redline/`. Partner references belong to a
+  dataspace membership, so partner operations are always scoped to a dataspace
+  the authenticated participant has joined.
 
 ## Prerequisites
 
@@ -103,22 +114,30 @@ npm start
 ```
 
 Open http://localhost:4200/. You'll land on `/login` and start SSO login via
-Keycloak.
+Keycloak. `npm run build` writes the production application to `dist/jad-ui/`;
+update any external deployment tooling that previously used `dist/lib-test/`.
 
 ## Configuration
 
 Runtime configuration lives in `public/config/` and is fetched at startup, so it
 can be replaced per environment without rebuilding:
 
-| File | Purpose |
-| --- | --- |
-| `app-config.json` | Menu items, health-check interval, view descriptions |
-| `redline-config.json` | Redline backend base URL + participant DID prefix |
-| `auth-config.json` | Keycloak issuer/client and OIDC redirect settings |
-| `participant-config.json` | Upload limits, file-sharing URL, and authenticated Siglet token-proxy URL |
+| File                      | Purpose                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `app-config.json`         | Menu items, health-check interval, view descriptions                                             |
+| `redline-config.json`     | Redline backend base URL + participant DID prefix                                                |
+| `auth-config.json`        | Keycloak issuer/client and OIDC redirect settings                                                |
+| `participant-config.json` | DID resolution scheme, upload limits, file-sharing URL, and authenticated Siglet token-proxy URL |
 
 If `redline-config.json` is missing or invalid, JAD UI falls back to built-in
-defaults (`http://localhost:8081`). See `src/operator-view/redline.config.ts`.
+defaults (`http://localhost:8081`). See `src/app/redline/redline.config.ts`.
+
+`participant-config.json`'s `did.scheme` selects `http` or `https` for public
+`did:web` document requests; the development default is `http`. Use HTTPS for
+trusted production resolution. The browser resolves host-only DIDs at
+`/.well-known/did.json` and path DIDs at `/<path>/did.json`; successful endpoints
+are cached during the session. DID document requests never carry the app bearer
+token, including when the DID host is the same origin.
 
 Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
 Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
@@ -139,9 +158,9 @@ same-named download-token claims. Old assets need metadata migration or re-uploa
 
 See [download setup and verification](ops/transfer-download/README.md) for
 Siglet configuration, proxy authentication, and the verified browser flow.
-The checked-in `/proxy/issuerservice` URL is a **local compatibility mapping**
-to Siglet, not the normal issuer-service route; use a dedicated Siglet proxy in
-shared deployments. Keep `/proxy/default` on the control-plane health API.
+The checked-in `/proxy/siglet` URL is the local Siglet token proxy; configure a
+CORS-enabled, participant-scoped proxy for shared deployments. Keep
+`/proxy/default` on the control-plane health API.
 
 ## Tenant dataspace membership
 
@@ -174,6 +193,41 @@ dataspaces and the tenant's memberships across its participants.
 The existing `tenant-admin` role controls both route access and menu visibility;
 no new Keycloak role, mapper, token claim, or identity-sync behavior is needed.
 Backend authorization remains Redline's responsibility.
+
+## Partner references
+
+Partner references are stored **per dataspace membership** of the authenticated
+participant (`dataspace_info_partners` in Redline, keyed by `dataspace_info`), not
+per tenant or globally. A participant that has not joined a dataspace has no
+place to store partners, and writing to a dataspace the participant has not
+joined fails with `404 Dataspace info not found for participant …`.
+
+The **Partners** view at `/partners` therefore works per dataspace:
+
+- It lists every dataspace the participant joined (`GET
+/api/ui/service-providers/1/tenants/{tenantId}/participants/{participantId}/dataspaces`)
+  together with that dataspace's partners (`GET …/partners/{dataspaceId}`), and
+  groups the stored partners by dataspace. Partner display names come from the
+  Redline tenant of the matching participant DID.
+- **Add selected** writes to the dataspace chosen in the view (defaulting to the
+  first joined one) via
+  `POST …/participants/{participantId}/partners/{dataspaceId}`. The candidate
+  list contains registered participants of other tenants that are not yet
+  partners of that dataspace.
+- **Add unregistered partner** creates a reference for any identifier (for
+  counterparties not registered under this service provider), with an optional
+  nickname and a properties JSON object. Redline validates neither, so entries
+  are only meaningful to the connector/policy tooling that reads them.
+- Per-dataspace results (including backend messages) are shown inline in the
+  add panel instead of a single global alert, and a failure keeps the selection
+  so a retry does not require re-selecting.
+- Removing partners is unavailable: the Redline API has no delete-partner
+  endpoint. Leaving a dataspace (`/dataspaces`) still removes its partners.
+
+`PartnerService` exposes `getPartners()` (deduplicated across all joined
+dataspaces) for partner-name lookups in Files, Explore and transfer history, and
+the dataspace-scoped `getDataspacePartners()`, `getPartnersForDataspace()` and
+`addPartner(dataspaceId, partner)` for the view.
 
 ## Policy Builder
 
@@ -280,8 +334,13 @@ configuration and local tests.
 
 ## Authentication & roles
 
-Auth is abstracted behind `AuthProvider`. The shipped
-`KeycloakAuthProvider` uses OAuth 2.0 / OpenID Connect with Keycloak.
+`KeycloakAuthProvider` uses OAuth 2.0 / OpenID Connect with Keycloak. The app's
+session state is held in memory; startup removes legacy token-bearing app session
+copies from local storage. The OAuth library manages its own token storage.
+
+The bearer interceptor automatically adds tokens only to same-origin, non-public
+requests. Cross-origin Redline requests do not receive a bearer token automatically;
+file-sharing and Siglet requests use their explicit authorization headers.
 
 Three realm roles are supported:
 
@@ -303,19 +362,19 @@ Missing required claims reject login during callback processing.
 
 Kubernetes manifests for local development are under `ops/keycloak/`.
 
-1) Add local host mapping:
+1. Add local host mapping:
 
 ```text
 127.0.0.1 keycloak.jad.localhost
 ```
 
-2) Deploy all dev services (or only Keycloak with `kubectl apply -k ops/keycloak/`):
+2. Deploy all dev services (or only Keycloak with `kubectl apply -k ops/keycloak/`):
 
 ```bash
 kubectl apply -k ops/
 ```
 
-3) Verify:
+3. Verify:
 
 ```bash
 kubectl -n edc-v get pods
@@ -337,9 +396,10 @@ The realm import config creates:
 - roles `operator`, `tenant-admin` and `tenant-user`
 - client `jad-ui` (public, code flow, PKCE)
 - protocol mappers for `participant_context_id`, `edc_connector_config`, and `operator_id`
-- demo users `operator`, `participant` (tenant-user) and `participant-admin` (tenant-admin) with role-specific attributes
+- the demo `operator` user with its operator-specific attribute; participant users are created by keycloakagent
 
 ### Sync Redline participants with Keycloak
+
 A background agent (`keycloakagent`) keeps participant identities in sync
 automatically. It runs in the cluster and, every 60 seconds, polls the Redline
 UI API for tenants and participants under the seeded service provider with ID
@@ -349,7 +409,7 @@ context id, upserts the jwtlet mapping for the EDC proxy service account,
 registers each participant's Siglet HTTP-pull dataplane with the control plane,
 and creates/updates both Keycloak users with the same `edc_connector_config`
 claim. The existing username receives `tenant-user`; `<username>-admin` receives
-`tenant-admin`. Old `participant` role mappings are removed from synced users. Only create/update is performed — users no
+`tenant-admin`. Conflicting tenant-role mappings are removed from synced users. Only create/update is performed — users no
 longer present in Redline are never removed.
 
 The unified `kubectl apply -k ops/` deployment includes the agent (see
@@ -379,13 +439,19 @@ Cluster-internal registration endpoints are configurable in
 - `SIGLET_SIGNALING_URL` — Siglet signaling base (port 8081).
 - `JWTLET_TOKEN_EXCHANGE_URL` — jwtlet token-exchange base (port 8080; the agent appends `/token`).
 - `JWTLET_AUDIENCE` — exchanged token audience (default `edcv`).
+- `DID_SCHEME` — `http` (development default) or `https` for DID documents. The
+  agent retains its existing `/<path>/.well-known/did.json` path convention,
+  distinct from the browser's standard path-DID URL.
 
 See [remote download setup and browser verification](ops/transfer-download/README.md).
 Run agent tests with `python -m unittest discover -s ops/keycloakagent -v`
 (requires `requests` and `kubectl` for the rendered ConfigMap check).
 
-The agent uses the path of the DID `did:web:identity.jad.localhost:<path>` as both username
-and password for the tenant-user in dev. The admin login is `<path>-admin` with password `admin`.
+On initial creation, the agent uses the path of `did:web:identity.jad.localhost:<path>`
+as the tenant-user's username and password. The admin login is `<path>-admin`
+with initial password `admin`. Subsequent syncs update attributes and roles but
+never reset existing passwords; change these development credentials for any
+shared environment.
 
 Both logins currently use the same EDC proxy service-account jwtlet mapping.
 The deployment explicitly sets `JWTLET_SCOPES` to retain the existing management
@@ -400,6 +466,8 @@ src/
 │   ├── app.config.ts        # bootstrap providers (router, http, auth, redline)
 │   ├── app.routes.ts        # top-level + lazy-loaded shell child routes
 │   ├── auth/                # AuthService, Keycloak provider, guards, access rules
+│   ├── redline/             # shared Redline config, models and service
+│   ├── runtime-config.ts    # common runtime configuration initializer
 │   ├── login/               # login view
 │   ├── registration/        # public tenant-registration form
 │   └── shell/               # dashboard shell wrapper + user menu
@@ -409,9 +477,7 @@ src/
 │   ├── edc-controllers/     # custom management API controllers
 │   └── files/ explore/ partners/ services/ models/ utils/
 ├── operator-view/
-│   ├── redline.config.ts    # REDLINE_CONFIG token + APP_INITIALIZER loader
-│   ├── services/            # RedlineService (tenants, dataspaces, deploy)
-│   ├── models/ util/
+│   ├── util/                # deployment and DID helpers
 │   └── tenant-view/         # tenants & open-registrations UI
 └── styles.css               # Tailwind + daisyUI themes
 public/config/               # runtime JSON config

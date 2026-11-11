@@ -1,13 +1,12 @@
-import { Component, EventEmitter, inject, Output } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { JsonObjectInputComponent } from '@eclipse-edc/dashboard-core';
 
-import { DataspaceRequest } from '../../models/redline.models';
+import { DataspaceRequest } from '../../../app/redline/redline.models';
 
 /** Form for creating a new dataspace. Rendered inside a modal. */
 @Component({
-  selector: 'dataspace-form',
-  standalone: true,
+  selector: 'app-dataspace-form',
   imports: [ReactiveFormsModule, JsonObjectInputComponent],
   templateUrl: './dataspace-form.component.html',
 })
@@ -15,16 +14,13 @@ export class DataspaceFormComponent {
   private readonly fb = inject(FormBuilder);
 
   /** Emitted with the new dataspace when the form is submitted. */
-  @Output() save = new EventEmitter<DataspaceRequest>();
-
-  /** Emitted when the user cancels the form. */
-  @Output() cancel = new EventEmitter<void>();
+  readonly save = output<DataspaceRequest>();
 
   readonly form = this.fb.nonNullable.group({
-    name: ['', [Validators.required]],
+    name: ['', [Validators.required, Validators.pattern(/\S/)]],
   });
 
-  properties: Record<string, any> = {};
+  properties: NonNullable<JsonObjectInputComponent['object']> = {};
 
   submit(): void {
     if (this.form.invalid) {

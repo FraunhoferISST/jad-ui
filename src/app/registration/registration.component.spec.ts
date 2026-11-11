@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { RedlineService } from '../../operator-view/services/redline.service';
+import { RedlineService } from '../redline/redline.service';
 import { RegistrationComponent } from './registration.component';
 
 describe('RegistrationComponent', () => {

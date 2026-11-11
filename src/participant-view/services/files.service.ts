@@ -11,7 +11,7 @@ export class FilesService {
   private readonly fileSharing = inject(FileSharingApiService);
   private readonly catalog = inject(CatalogService);
 
-  async getAllFilesWithCatalogAccess(): Promise<FileAsset[]> {
+  private async getAllFilesWithCatalogAccess(): Promise<FileAsset[]> {
     const localFiles = await this.fileSharing.listFiles();
     const mappedLocal = localFiles.map((file) => this.mapFileSharingResource(file));
 
@@ -37,16 +37,6 @@ export class FilesService {
   async getFilesForExploreView(): Promise<FileAsset[]> {
     const files = await this.getAllFilesWithCatalogAccess();
     return files.filter((file) => file.origin === 'remote');
-  }
-
-  async getOwnedFiles(): Promise<FileAsset[]> {
-    const localFiles = await this.fileSharing.listFiles();
-    const files = localFiles
-      .map((file) => this.mapFileSharingResource(file))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    await this.catalog.matchContractsToFiles(files);
-    return files;
   }
 
   private mapFileSharingResource(file: FileSharingFileResource): FileAsset {
