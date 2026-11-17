@@ -1,10 +1,10 @@
 # JAD UI
 
-A role-aware dashboard for **Eclipse Dataspace Components (EDC)** dataspaces. JAD UI
-uses the [`@eclipse-edc/DataDashboard`](https://github.com/eclipse-edc/DataDashboard)
-library shell for participant workflows (catalog, assets, policies, contracts,
-transfers) and adds custom **operator views** for tenant onboarding and
-deployment, backed by the Redline tenant-management API.
+JAD UI (`jad-ui`) is a standalone, role-aware dashboard for **Eclipse Dataspace
+Components (EDC)** dataspaces. It uses `@eclipse-edc/dashboard-core` from
+[EDC DataDashboard](https://github.com/eclipse-edc/DataDashboard) for the application
+shell and EDC workflows, with custom participant and operator views backed by the
+Redline tenant-management API.
 
 > Built with Angular 21, Tailwind CSS 4, and daisyUI. Standalone components,
 > lazy-loaded routes, and Keycloak authentication.
@@ -17,10 +17,14 @@ deployment, backed by the Redline tenant-management API.
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Getting started](#getting-started)
+- [Build and test](#build-and-test)
+- [Container image](#container-image)
 - [Configuration](#configuration)
+- [Remote file downloads](#remote-file-downloads)
 - [Tenant dataspace membership](#tenant-dataspace-membership)
 - [Partner references](#partner-references)
 - [Policy Builder](#policy-builder)
+- [Deploy Kubernetes dev services](#deploy-kubernetes-dev-services)
 - [JAD policy profile seed](#jad-policy-profile-seed)
 - [Authentication & roles](#authentication--roles)
 - [Project structure](#project-structure)
@@ -93,8 +97,9 @@ deployment, backed by the Redline tenant-management API.
 
 ## Prerequisites
 
-- **Node.js** 20.19+ or 22.12+ (this repo is tested on Node 26).
+- **Node.js 24 LTS** recommended.
 - **npm** 10+.
+- **Docker with BuildKit** to build container images locally (optional).
 - Access to the **GitHub Packages** registry for `@eclipse-edc` scope. The
   `.npmrc` already points the scope at `https://npm.pkg.github.com/`; you need a
   personal access token with `read:packages` available to npm:
@@ -106,28 +111,78 @@ deployment, backed by the Redline tenant-management API.
 ## Getting started
 
 ```bash
-# install dependencies (requires GitHub Packages auth, see above)
-npm install
+# Install the locked dependencies (requires GitHub Packages auth, see above).
+npm ci
 
-# start the dev server with HMR
+# Start the development server with HMR.
 npm start
 ```
 
-Open http://localhost:4200/. You'll land on `/login` and start SSO login via
-Keycloak. `npm run build` writes the production application to `dist/jad-ui/`;
-update any external deployment tooling that previously used `dist/lib-test/`.
+Open http://localhost:4200/. Sign-in requires Keycloak and the backing services;
+see [Kubernetes dev services](#deploy-kubernetes-dev-services) and
+[Authentication & roles](#authentication--roles) for the local setup.
+
+## Build and test
+
+| Command | Purpose |
+| --- | --- |
+| `npm start` | Run the development server on port 4200. |
+| `npm run build` | Build the production application with bundle budget checks. |
+| `npm run watch` | Rebuild the development application when files change. |
+| `npm test` | Run the Karma/Jasmine suite in watch mode; requires Chrome. |
+
+The Angular project and npm package are both named **`jad-ui`**. Production browser
+assets are written to **`dist/jad-ui/browser/`**, the directory served by the
+container image. The Dockerfile installs dependencies and builds these assets
+from source; no local production build is required before `docker build`.
+
+For a single headless test run:
+
+```bash
+npm test -- --watch=false --browsers=ChromeHeadless
+```
+
+Set `CHROME_BIN` to your browser executable if using Chromium instead of Chrome.
+
+## Container image
+
+Pull and run the latest image built from `main`, replacing `<owner>/<repository>`
+with the lowercase GitHub repository name (for example, `eclipse-dataspace-hub/jad-ui`):
+
+```bash
+docker pull ghcr.io/<owner>/<repository>:latest
+docker run --rm -p 4200:8080 ghcr.io/<owner>/<repository>:latest
+```
+
+Open http://localhost:4200/. The `latest` tag moves with new builds; to pin a
+specific build, use `:sha-<full-commit-sha>` or the image digest instead.
+
+The image listens on port **8080**. Mount replacement runtime JSON files under
+`/usr/share/nginx/html/config/` to configure the deployment, including Keycloak
+redirect URLs (see [Configuration](#configuration)).
+
+To build the image locally, pass your authenticated npm configuration as a
+BuildKit secret; no separate npm install or build is needed:
+
+```bash
+docker build --secret id=npmrc,src="$HOME/.npmrc" --tag jad-ui:local .
+docker run --rm -p 4200:8080 jad-ui:local
+```
 
 ## Configuration
 
 Runtime configuration lives in `public/config/` and is fetched at startup, so it
 can be replaced per environment without rebuilding:
 
-| File                      | Purpose                                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------------------ |
-| `app-config.json`         | Menu items, health-check interval, view descriptions                                             |
-| `redline-config.json`     | Redline backend base URL + participant DID prefix                                                |
-| `auth-config.json`        | Keycloak issuer/client and OIDC redirect settings                                                |
-| `participant-config.json` | DID resolution scheme, upload limits, file-sharing URL, and authenticated Siglet token-proxy URL |
+| File | Purpose |
+| --- | --- |
+| `app-config.json` | Menu items, health-check interval, and view descriptions. |
+| `redline-config.json` | Redline backend base URL and participant DID prefix. |
+| `auth-config.json` | Keycloak issuer/client and OIDC redirect settings. |
+| `participant-config.json` | DID scheme, upload limits, file-sharing and Siglet proxy URLs. |
+
+The shared policy schema is served separately at `config/jad-profile.json`; its
+source is `ops/jad-profile-seed/jad-profile.json`, not `public/config/`.
 
 If `redline-config.json` is missing or invalid, JAD UI falls back to built-in
 defaults (`http://localhost:8081`). See `src/app/redline/redline.config.ts`.
@@ -139,8 +194,9 @@ trusted production resolution. The browser resolves host-only DIDs at
 are cached during the session. DID document requests never carry the app bearer
 token, including when the DID host is the same origin.
 
-Currently, JADs only way to access the EDC components is with a jwtlet provisioned token, which relies on kubernetes service accounts and the kubernetes token API.
-Therefore, we need `kubectl` and the jwtlet to generate tokens for the tenants/participants.
+Local EDC proxy access relies on jwtlet and Kubernetes service-account tokens.
+Provisioning participant identities therefore requires access to jwtlet and
+`kubectl`.
 
 ## Remote file downloads
 
@@ -460,30 +516,36 @@ the UI role split alone does not enforce backend least privilege.
 
 ## Project structure
 
-```
-src/
-├── app/
-│   ├── app.config.ts        # bootstrap providers (router, http, auth, redline)
-│   ├── app.routes.ts        # top-level + lazy-loaded shell child routes
-│   ├── auth/                # AuthService, Keycloak provider, guards, access rules
-│   ├── redline/             # shared Redline config, models and service
-│   ├── runtime-config.ts    # common runtime configuration initializer
-│   ├── login/               # login view
-│   ├── registration/        # public tenant-registration form
-│   └── shell/               # dashboard shell wrapper + user menu
-├── participant-view/
-│   ├── dataspaces/          # tenant-admin membership management via Redline
-│   ├── policy-builder/      # schema-driven ODRL builder and validation
-│   ├── edc-controllers/     # custom management API controllers
-│   └── files/ explore/ partners/ services/ models/ utils/
-├── operator-view/
-│   ├── util/                # deployment and DID helpers
-│   └── tenant-view/         # tenants & open-registrations UI
-└── styles.css               # Tailwind + daisyUI themes
-public/config/               # runtime JSON config
-ops/jad-profile-seed/jad-profile.json # shared schema; served at config/jad-profile.json
-ops/kustomization.yaml       # deploy all three dev components with kubectl apply -k ops/
-ops/keycloak/                 # flat Gateway API-only Keycloak deployment
-ops/keycloakagent/            # Redline participant identity sync
-ops/jad-profile-seed/         # temporary schema + CEL registration Job
+```text
+jad-ui/
+├── src/
+│   ├── main.ts                  # standalone application bootstrap
+│   ├── app/
+│   │   ├── app.config.ts        # router, HTTP, auth and runtime config providers
+│   │   ├── app.routes.ts        # top-level and lazy-loaded shell child routes
+│   │   ├── auth/                # auth service, Keycloak provider and access rules
+│   │   ├── redline/             # shared Redline config, models and service
+│   │   ├── runtime-config.ts    # common runtime configuration initializer
+│   │   ├── login/               # login view
+│   │   ├── registration/        # public tenant-registration form
+│   │   └── shell/               # dashboard shell wrapper and user menu
+│   ├── participant-view/
+│   │   ├── dataspaces/          # tenant-admin membership management via Redline
+│   │   ├── policy-builder/      # schema-driven ODRL builder and validation
+│   │   ├── edc-controllers/     # custom management API controllers
+│   │   └── files/ explore/ partners/ services/ models/ utils/
+│   ├── operator-view/
+│   │   ├── util/                # deployment and DID helpers
+│   │   └── tenant-view/         # tenants and open-registrations UI
+│   └── styles.css               # Tailwind and daisyUI themes
+├── public/config/               # environment-specific runtime JSON
+├── ops/
+│   ├── kustomization.yaml       # shared dev-services entry point
+│   ├── keycloak/                # Gateway API-only Keycloak deployment
+│   ├── keycloakagent/           # Redline participant identity sync
+│   └── jad-profile-seed/        # shared schema and temporary schema/CEL seed Job
+├── angular.json                 # jad-ui build, serve and test targets
+├── package.json                 # jad-ui dependencies and npm commands
+├── Dockerfile                   # Angular build stage and unprivileged Nginx runtime
+└── nginx.conf                   # SPA fallback and runtime-config serving
 ```

@@ -1,0 +1,31 @@
+version: 2
+
+registries:
+  github-packages:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /
+    registries:
+      - github-packages
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    ignore:
+      # This patched client must remain pinned to the checked-in local tarball.
+      - dependency-name: '@think-it-labs/edc-connector-client'

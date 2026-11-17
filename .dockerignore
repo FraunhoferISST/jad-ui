@@ -1,0 +1,18 @@
+# Include only the inputs needed to build and serve JAD UI.
+**
+!Dockerfile
+!nginx.conf
+!package.json
+!package-lock.json
+!.npmrc
+!think-it-labs-edc-connector-client-0.10.0.tgz
+!angular.json
+!tsconfig*.json
+!.postcssrc.json
+!src/
+!src/**
+!public/
+!public/**
+!ops/
+!ops/jad-profile-seed/
+!ops/jad-profile-seed/jad-profile.json

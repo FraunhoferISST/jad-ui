@@ -1,0 +1,29 @@
+name: First Interaction
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  first-interaction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      # Never check out or execute PR code in this privileged workflow.
+      - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_message: >-
+            Thanks for your first issue! Please include steps to reproduce,
+            expected behavior, and relevant environment details for bug reports.
+          pr_message: >-
+            Thanks for your first contribution to JAD UI! Please review the
+            README for setup instructions, describe your changes, link any
+            related issue, and make sure the build and unit tests pass.
